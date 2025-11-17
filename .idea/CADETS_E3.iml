@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
-    <content url="file://$MODULE_DIR$" />
+    <content url="file://$MODULE_DIR$">
+      <excludeFolder url="file://$MODULE_DIR$/artifact/graph_4_3" />
+      <excludeFolder url="file://$MODULE_DIR$/artifact/graph_4_4" />
+      <excludeFolder url="file://$MODULE_DIR$/artifact/graph_4_5" />
+      <excludeFolder url="file://$MODULE_DIR$/artifact/graph_4_6" />
+      <excludeFolder url="file://$MODULE_DIR$/artifact/graph_4_7" />
+      <excludeFolder url="file://$MODULE_DIR$/artifact/graph_visual" />
+      <excludeFolder url="file://$MODULE_DIR$/artifact/graphs" />
+      <excludeFolder url="file://$MODULE_DIR$/artifact/models" />
+    </content>
     <orderEntry type="jdk" jdkName="kairos312" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>

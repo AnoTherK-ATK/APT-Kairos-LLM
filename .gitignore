@@ -1,2 +1,4 @@
 artifact/*
 e3/*
+.idea/*
+__pycache__/
