@@ -11,7 +11,8 @@ EOF
 
 echo "[*] Creating tables inside $DB_NAME..."
 sudo -u postgres psql -d $DB_NAME <<EOF
-
+DROP DATABASE IF EXISTS $DB_NAME;
+CREATE DATABASE $DB_NAME;
 -- Create event table
 CREATE TABLE event_table
 (
@@ -23,9 +24,9 @@ CREATE TABLE event_table
     timestamp_rec bigint,
     _id           serial
 );
-ALTER TABLE event_table OWNER TO postgres;
+ALTER TABLE event_table OWNER TO neondb_owner;
 CREATE UNIQUE INDEX event_table__id_uindex ON event_table (_id);
-GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON event_table TO postgres;
+GRANT DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE ON event_table TO neondb_owner;
 
 -- Create file_node_table
 CREATE TABLE file_node_table
@@ -35,7 +36,7 @@ CREATE TABLE file_node_table
     path      varchar,
     CONSTRAINT file_node_table_pk PRIMARY KEY (node_uuid, hash_id)
 );
-ALTER TABLE file_node_table OWNER TO postgres;
+ALTER TABLE file_node_table OWNER TO neondb_owner;
 
 -- Create netflow_node_table
 CREATE TABLE netflow_node_table
@@ -48,7 +49,7 @@ CREATE TABLE netflow_node_table
     dst_port  varchar,
     CONSTRAINT netflow_node_table_pk PRIMARY KEY (node_uuid, hash_id)
 );
-ALTER TABLE netflow_node_table OWNER TO postgres;
+ALTER TABLE netflow_node_table OWNER TO neondb_owner;
 
 -- Create subject_node_table
 CREATE TABLE subject_node_table
@@ -57,7 +58,7 @@ CREATE TABLE subject_node_table
     hash_id   varchar,
     exec      varchar
 );
-ALTER TABLE subject_node_table OWNER TO postgres;
+ALTER TABLE subject_node_table OWNER TO neondb_owner;
 
 -- Create node2id table
 CREATE TABLE node2id
@@ -67,7 +68,7 @@ CREATE TABLE node2id
     msg       varchar,
     index_id  bigint
 );
-ALTER TABLE node2id OWNER TO postgres;
+ALTER TABLE node2id OWNER TO neondb_owner;
 CREATE UNIQUE INDEX node2id_hash_id_uindex ON node2id (hash_id);
 
 EOF

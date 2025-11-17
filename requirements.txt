@@ -1,0 +1,22 @@
+# requirements-new.txt
+
+# Tính toán & Học máy
+numpy
+pandas
+scikit-learn
+
+# Cơ sở dữ liệu
+# (dùng psycopg2-binary để cài đặt dễ dàng hơn, không cần C compiler)
+psycopg2-binary
+
+# Đồ thị
+networkx
+python-louvain
+graphviz
+
+# Tiện ích
+tqdm
+pytz
+xxhash
+pyyaml
+yacs
