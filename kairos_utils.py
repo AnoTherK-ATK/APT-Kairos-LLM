@@ -99,12 +99,21 @@ def datetime_to_timestamp_US(date):
 
 def init_database_connection():
     if host is not None:
-        connect = psycopg2.connect(database = database,
-                                   host = host,
-                                   user = user,
-                                   password = password,
-                                   port = port
-                                  )
+        if host == "/var/run/postgresql/":
+            connect = psycopg2.connect(database = database,
+                                       host = host,
+                                       user = user,
+                                       password = password,
+                                       port = port
+                                      )
+        else:
+            connect = psycopg2.connect(database=database,
+                                       host=host,
+                                       user=user,
+                                       password=password,
+                                       port=port,
+                                       sslmode="require"
+                                       )
     else:
         connect = psycopg2.connect(database = database,
                                    user = user,
