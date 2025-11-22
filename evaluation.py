@@ -55,6 +55,16 @@ def ground_truth_label():
 
     return labels
 
+def calc10(y):
+    cnt1 = 0
+    cnt0 = 0
+    for val in y:
+        if y[val] == 1:
+            cnt1 += 1
+        else:
+            cnt0 += 1
+    return cnt1, cnt0
+
 def calc_attack_edges():
     def keyword_hit(line):
         attack_nodes = [
@@ -170,6 +180,14 @@ if __name__ == "__main__":
     labels = ground_truth_label()
     y = []
     y_pred = []
+    print("True")
+    cnt1, cnt0 = calc10(labels)
+    print("1: ", cnt1, " 0: ", cnt0)
+    print("Predict")
+    cnt1, cnt0 = calc10(pred_label)
+    print("1: ", cnt1, " 0: ", cnt0)
+
+    print(labels == pred_label)
     for i in labels:
         y.append(labels[i])
         y_pred.append(pred_label[i])

@@ -31,7 +31,7 @@ def train(train_data,
     gnn.train()
     link_pred.train()
 
-    memory.reset_state    ()  # Start with a fresh memory.
+    memory.reset_state()  # Start with a fresh memory.
     neighbor_loader.reset_state()  # Start with an empty graph.
 
     total_loss = 0
@@ -69,6 +69,7 @@ def train(train_data,
         optimizer.step()
         memory.detach()
         total_loss += float(loss) * batch.num_events
+        print("Loss: ", loss)
     return total_loss / train_data.num_events
 
 def load_train_data():
@@ -87,7 +88,7 @@ def init_models(node_feat_size):
         aggregator_module=LastAggregator(),
     ).to(device)
 
-    gnn = GraphAttentionEmbedding(
+    gnn = GraphSAGEEmbedding(
         in_channels=node_state_dim,
         out_channels=edge_dim,
         msg_dim=node_feat_size,
