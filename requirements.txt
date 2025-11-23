@@ -1,4 +1,5 @@
 # requirements-new.txt
+# conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 pytorch-cuda=12.1 -c pytorch -c nvidia
 
 # Tính toán & Học máy
 numpy~=2.3.4
@@ -22,5 +23,6 @@ pyyaml
 yacs
 
 torch-geometric~=2.7.0
-psycopg2~=2.9.10
 matplotlib~=3.10.7
+
+# pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.5.1+cu121.html
