@@ -1,22 +1,26 @@
 # requirements-new.txt
 
 # Tính toán & Học máy
-numpy
-pandas
-scikit-learn
+numpy~=2.3.4
+pandas~=2.3.3
+scikit-learn~=1.7.2
 
 # Cơ sở dữ liệu
 # (dùng psycopg2-binary để cài đặt dễ dàng hơn, không cần C compiler)
-psycopg2-binary
+psycopg2-binary~=2.9.11
 
 # Đồ thị
-networkx
-python-louvain
-graphviz
+networkx~=3.5
+python-louvain~=0.16
+graphviz~=0.21
 
 # Tiện ích
-tqdm
-pytz
-xxhash
+tqdm~=4.67.1
+pytz~=2025.2
+xxhash~=3.6.0
 pyyaml
 yacs
+
+torch-geometric~=2.7.0
+psycopg2~=2.9.10
+matplotlib~=3.10.7

@@ -1,4 +1,6 @@
 artifact/*
 e3/*
 .idea/*
-__pycache__/
+__pycache__/*
+experiment_results/*
+saved_models/*

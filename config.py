@@ -10,6 +10,8 @@ raw_dir = "/home/anotherk/kairos312/DARPA/CADETS_E3/e3/"
 # The directory to save all artifacts
 artifact_dir = "./artifact/"
 
+saved_model_dir = "./saved_models/"
+
 # The directory to save the vectorized graphs
 graphs_dir = artifact_dir + "graphs/"
 

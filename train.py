@@ -9,6 +9,9 @@ from kairos_utils import *
 from config import *
 from model import *
 from torch_geometric.loader import TemporalDataLoader
+import sys
+import argparse
+import shutil
 
 # Setting for logging
 logger = logging.getLogger("training_logger")
@@ -72,12 +75,12 @@ def train(train_data,
     return total_loss / train_data.num_events
 
 def load_train_data():
-    graph_4_2 = torch.load(graphs_dir + "/graph_4_2.TemporalData.simple", weights_only=False).to(device=device)
-    graph_4_3 = torch.load(graphs_dir + "/graph_4_3.TemporalData.simple", weights_only=False).to(device=device)
-    graph_4_4 = torch.load(graphs_dir + "/graph_4_4.TemporalData.simple", weights_only=False).to(device=device)
+    graph_4_2 = torch.load(graphs_dir + "graph_4_2.TemporalData.simple", weights_only=False).to(device=device)
+    graph_4_3 = torch.load(graphs_dir + "graph_4_3.TemporalData.simple", weights_only=False).to(device=device)
+    graph_4_4 = torch.load(graphs_dir + "graph_4_4.TemporalData.simple", weights_only=False).to(device=device)
     return [graph_4_2, graph_4_3, graph_4_4]
 
-def init_models(node_feat_size):
+def init_models(node_feat_size, model_name):
     memory = TGNMemory(
         max_node_num,
         node_feat_size,
@@ -87,12 +90,55 @@ def init_models(node_feat_size):
         aggregator_module=LastAggregator(),
     ).to(device)
 
-    gnn = GraphAttentionEmbedding(
-        in_channels=node_state_dim,
-        out_channels=edge_dim,
-        msg_dim=node_feat_size,
-        time_enc=memory.time_enc,
-    ).to(device)
+    if model_name == 'unimp':
+        gnn = GraphAttentionEmbedding(
+            in_channels=node_state_dim,
+            out_channels=edge_dim,
+            msg_dim=node_feat_size,
+            time_enc=memory.time_enc,
+        ).to(device)
+
+    elif model_name == 'sage':
+        # Yêu cầu class GraphSAGEEmbedding đã có trong model.py
+        gnn = GraphSAGEEmbedding(
+            in_channels=node_state_dim,
+            out_channels=edge_dim,
+            msg_dim=node_feat_size,
+            time_enc=memory.time_enc,
+        ).to(device)
+
+    elif model_name == 'gcn':
+        # Yêu cầu class GCNEmbedding đã có trong model.py
+        gnn = GCNEmbedding(
+            in_channels=node_state_dim,
+            out_channels=edge_dim,
+            msg_dim=node_feat_size,
+            time_enc=memory.time_enc,
+        ).to(device)
+
+    elif model_name == 'gat':
+        # Yêu cầu class GATEmbedding đã có trong model.py
+        gnn = GATEmbedding(
+            in_channels=node_state_dim,
+            out_channels=edge_dim,
+            msg_dim=node_feat_size,
+            time_enc=memory.time_enc,
+        ).to(device)
+
+    elif model_name == 'rgcn':
+        # Yêu cầu class RGCNEmbedding đã có trong model.py
+        # Tính số lượng quan hệ từ config
+        num_rels = len(include_edge_type)
+        gnn = RGCNEmbedding(
+            in_channels=node_state_dim,
+            out_channels=edge_dim,
+            msg_dim=node_feat_size,
+            time_enc=memory.time_enc,
+            num_relations=num_rels
+        ).to(device)
+
+    else:
+        raise ValueError(f"Model name '{model_name}' not supported/implemented.")
 
     out_channels = len(include_edge_type)
     link_pred = LinkPredictor(in_channels=edge_dim, out_channels=out_channels).to(device)
@@ -106,6 +152,15 @@ def init_models(node_feat_size):
     return memory, gnn, link_pred, optimizer, neighbor_loader
 
 if __name__ == "__main__":
+    # --- PARSE ARGUMENTS ---
+    parser = argparse.ArgumentParser(description='KAIROS Training Script')
+    parser.add_argument('--model', type=str, default='unimp',
+                        choices=['unimp', 'sage', 'gcn', 'gat', 'rgcn'],
+                        help='Choose the GNN backbone model')
+    parser.add_argument('--epoch', type=int, default=50,
+                        help='Number of training epochs')
+
+    args = parser.parse_args()
     logger.info("Start logging.")
 
     # Load data for training
@@ -113,10 +168,10 @@ if __name__ == "__main__":
 
     # Initialize the models and the optimizer
     node_feat_size = train_data[0].msg.size(-1)
-    memory, gnn, link_pred, optimizer, neighbor_loader = init_models(node_feat_size=node_feat_size)
+    memory, gnn, link_pred, optimizer, neighbor_loader = init_models(node_feat_size=node_feat_size, model_name=args.model)
 
     # train the model
-    for epoch in tqdm(range(1, epoch_num+1)):
+    for epoch in tqdm(range(1, args.epoch+1)):
         for g in train_data:
             loss = train(
                 train_data=g,

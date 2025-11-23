@@ -54,7 +54,118 @@ class GraphSAGEEmbedding(torch.nn.Module):
 
         x = self.conv2(x, edge_index)
 
+        return x
 
+from torch_geometric.nn import GCNConv
+class GCNEmbedding(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, msg_dim, time_enc):
+        super(GCNEmbedding, self).__init__()
+        self.time_enc = time_enc
+
+        # GCNConv cơ bản
+        self.conv1 = GCNConv(in_channels, out_channels)
+        self.conv2 = GCNConv(out_channels, out_channels)
+
+    def forward(self, x, last_update, edge_index, t, msg):
+        x = x.to(device)
+        edge_index = edge_index.to(device)
+
+        # Lớp 1 + ReLU
+        x = self.conv1(x, edge_index)
+        x = F.relu(x)
+
+        # Lớp 2
+        x = self.conv2(x, edge_index)
+
+        return x
+
+
+from torch_geometric.nn import GATv2Conv
+
+
+class GATEmbedding(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, msg_dim, time_enc):
+        super(GATEmbedding, self).__init__()
+        self.time_enc = time_enc
+
+        # Tính toán kích thước edge_dim
+        # msg_dim là kích thước vector thông điệp (đã bao gồm time encoding nếu bạn concat)
+        # Trong KAIROS gốc, edge_attr = time_encoding + msg
+        edge_dim = msg_dim + time_enc.out_channels
+
+        # GATv2 có hỗ trợ edge_dim
+        self.conv1 = GATv2Conv(in_channels, out_channels, heads=2, edge_dim=edge_dim)
+        # Lớp 2: input là out_channels * heads
+        self.conv2 = GATv2Conv(out_channels * 2, out_channels, heads=1, edge_dim=edge_dim, concat=False)
+
+    def forward(self, x, last_update, edge_index, t, msg):
+        x = x.to(device)
+        edge_index = edge_index.to(device)
+        t = t.to(device)
+        last_update = last_update.to(device)
+
+        # --- Tái tạo đặc trưng cạnh (Edge Features) ---
+        # Giống hệt logic trong UniMP cũ để tận dụng thông tin cạnh
+        rel_t = last_update[edge_index[0]] - t
+        rel_t_enc = self.time_enc(rel_t.to(x.dtype))
+        edge_attr = torch.cat([rel_t_enc, msg], dim=-1)
+
+        # Truyền edge_attr vào GAT
+        x = self.conv1(x, edge_index, edge_attr=edge_attr)
+        x = F.relu(x)
+        x = self.conv2(x, edge_index, edge_attr=edge_attr)
+
+        return x
+
+
+from torch_geometric.nn import RGCNConv
+import torch
+
+
+class RGCNEmbedding(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, msg_dim, time_enc, num_relations):
+        super(RGCNEmbedding, self).__init__()
+        self.time_enc = time_enc
+        self.num_relations = num_relations
+
+        # RGCNConv lớp 1
+        # num_relations: số lượng loại quan hệ (ví dụ: 10 loại READ, WRITE...)
+        self.conv1 = RGCNConv(in_channels, out_channels, num_relations=num_relations)
+
+        # RGCNConv lớp 2
+        self.conv2 = RGCNConv(out_channels, out_channels, num_relations=num_relations)
+
+    def forward(self, x, last_update, edge_index, t, msg):
+        x = x.to(device)
+        edge_index = edge_index.to(device)
+
+        # --- BƯỚC QUAN TRỌNG: TRÍCH XUẤT LOẠI CẠNH (EDGE TYPE) ---
+        # Trong KAIROS, 'msg' chứa thông tin node nguồn, node đích và loại cạnh.
+        # Chúng ta cần lấy ra chỉ số loại cạnh từ vector 'msg'.
+        # Giả sử cấu trúc msg là [NodeFeat | EdgeOneHot | NodeFeat]
+        # Chúng ta lấy phần giữa (EdgeOneHot) và tìm vị trí số 1 (argmax)
+
+        # Lấy kích thước feature của node từ msg (giả định msg_dim đã biết hoặc tính toán)
+        # Trong test.py logic là: tensor_find(m[node_embedding_dim:-node_embedding_dim], 1)
+        # Ở đây ta làm tương tự bằng torch.argmax để nhanh hơn trên GPU
+
+        # msg shape: [num_edges, msg_dim]
+        # Node embedding dim lấy từ config (node_embedding_dim)
+
+        # Cắt lấy phần one-hot của cạnh
+        edge_part = msg[:, node_embedding_dim: -node_embedding_dim]
+
+        # Chuyển one-hot thành chỉ số (0, 1, 2...) -> Đây chính là edge_type
+        edge_type = edge_part.argmax(dim=1).to(device)
+
+        # --- ĐƯA VÀO MÔ HÌNH ---
+
+        # Lớp 1: Truyền edge_type vào
+        x = self.conv1(x, edge_index, edge_type)
+        x = F.relu(x)
+
+        # Lớp 2
+        x = self.conv2(x, edge_index, edge_type)
 
         return x
 
