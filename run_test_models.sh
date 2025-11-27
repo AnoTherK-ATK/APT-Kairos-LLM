@@ -17,7 +17,7 @@ echo "   KAIROS - CHẾ ĐỘ CHẠY ĐÁNH GIÁ (INFERENCE ONLY)"
 echo "========================================================"
 
 # Kiểm tra xem có thư mục data chưa
-if [ ! -f "$ARTIFACT_DIR/graph_4_6.TemporalData.simple" ]; then
+if [ ! -f "$ARTIFACT_DIR/graphs/graph_4_6.TemporalData.simple" ]; then
     echo "❌ LỖI: Không tìm thấy dữ liệu pre-process (.simple files)."
     echo "👉 Hãy copy thư mục 'artifact' từ máy train sang máy này."
     exit 1
@@ -25,6 +25,7 @@ fi
 
 for model in "${MODELS[@]}"
 do
+    rm ./artifact/evaluation.log
     # Kiểm tra xem file model có tồn tại không
     SOURCE_MODEL="$MODEL_DIR/models_$model.pt"
 

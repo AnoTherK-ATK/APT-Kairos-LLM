@@ -55,16 +55,6 @@ def ground_truth_label():
 
     return labels
 
-def calc10(y):
-    cnt1 = 0
-    cnt0 = 0
-    for val in y:
-        if y[val] == 1:
-            cnt1 += 1
-        else:
-            cnt0 += 1
-    return cnt1, cnt0
-
 def calc_attack_edges():
     def keyword_hit(line):
         attack_nodes = [
@@ -109,8 +99,7 @@ if __name__ == "__main__":
 
     # Validation date
     anomalous_queue_scores = []
-
-    history_list = torch.load(f"{artifact_dir}/graph_4_5_history_list", weights_only=False)
+    history_list = torch.load(f"{artifact_dir}/graph_4_5_history_list")
     for hl in history_list:
         anomaly_score = 0
         for hq in hl:
@@ -127,8 +116,7 @@ if __name__ == "__main__":
         # logger.info(f"Anomaly score: {anomaly_score}")
 
         anomalous_queue_scores.append(anomaly_score)
-    beta = max(anomalous_queue_scores)
-    logger.info(f"The largest anomaly score in validation set is: {beta}\n")
+    logger.info(f"The largest anomaly score in validation set is: {max(anomalous_queue_scores)}\n")
 
 
     # Evaluating the testing set
@@ -142,7 +130,7 @@ if __name__ == "__main__":
     for f in filelist:
         pred_label[f] = 0
 
-    history_list = torch.load(f"{artifact_dir}/graph_4_6_history_list", weights_only=False)
+    history_list = torch.load(f"{artifact_dir}/graph_4_6_history_list")
     for hl in history_list:
         anomaly_score = 0
         for hq in hl:
@@ -160,7 +148,7 @@ if __name__ == "__main__":
                 pred_label[i] = 1
             logger.info(f"Anomaly score: {anomaly_score}")
 
-    history_list = torch.load(f"{artifact_dir}/graph_4_7_history_list", weights_only=False)
+    history_list = torch.load(f"{artifact_dir}/graph_4_7_history_list")
     for hl in history_list:
         anomaly_score = 0
         for hq in hl:
@@ -182,11 +170,6 @@ if __name__ == "__main__":
     labels = ground_truth_label()
     y = []
     y_pred = []
-
-    cnt1, cnt0 = calc10(labels)
-
-    cnt1, cnt0 = calc10(pred_label)
-
     for i in labels:
         y.append(labels[i])
         y_pred.append(pred_label[i])

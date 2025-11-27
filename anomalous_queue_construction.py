@@ -195,6 +195,7 @@ if __name__ == "__main__":
     node_IDF, tw_list = compute_IDF()
 
     # Validation date
+
     history_list = anomalous_queue_construction(
         node_IDF=node_IDF,
         tw_list=tw_list,

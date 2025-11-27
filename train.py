@@ -89,16 +89,14 @@ def init_models(node_feat_size, model_name):
         message_module=IdentityMessage(node_feat_size, node_state_dim, time_dim),
         aggregator_module=LastAggregator(),
     ).to(device)
+    gnn = GraphAttentionEmbedding(
+        in_channels=node_state_dim,
+        out_channels=edge_dim,
+        msg_dim=node_feat_size,
+        time_enc=memory.time_enc,
+    ).to(device)
 
-    if model_name == 'unimp':
-        gnn = GraphAttentionEmbedding(
-            in_channels=node_state_dim,
-            out_channels=edge_dim,
-            msg_dim=node_feat_size,
-            time_enc=memory.time_enc,
-        ).to(device)
-
-    elif model_name == 'sage':
+    if model_name == 'sage':
         # Yêu cầu class GraphSAGEEmbedding đã có trong model.py
         gnn = GraphSAGEEmbedding(
             in_channels=node_state_dim,
@@ -137,8 +135,6 @@ def init_models(node_feat_size, model_name):
             num_relations=num_rels
         ).to(device)
 
-    else:
-        raise ValueError(f"Model name '{model_name}' not supported/implemented.")
 
     out_channels = len(include_edge_type)
     link_pred = LinkPredictor(in_channels=edge_dim, out_channels=out_channels).to(device)
