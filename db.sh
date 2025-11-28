@@ -23,14 +23,14 @@ export PGPASSWORD='$DB_PASS'
 
 # 3. Tạo Database
 echo "[*] Đang xóa (nếu có) và tạo lại database..."
-sudo -u postgres psql <<EOF
+sudo -u postgres PGPASSWORD='postgres' psql <<EOF
 DROP DATABASE IF EXISTS $DB_NAME;
 CREATE DATABASE $DB_NAME;
 EOF
 
 # 4. Tạo Bảng (Tables)
 echo "[*] Đang tạo cấu trúc bảng trong $DB_NAME..."
-sudo -u postgres psql -d $DB_NAME <<EOF
+sudo -u postgres PGPASSWORD='postgres' psql -d $DB_NAME <<EOF
 
 -- Bảng lưu sự kiện (Edges)
 CREATE TABLE IF NOT EXISTS event_table (
