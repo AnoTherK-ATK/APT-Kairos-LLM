@@ -25,4 +25,5 @@ yacs
 torch-geometric~=2.7.0
 matplotlib~=3.10.7
 
+graph-of-thoughts
 # pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.5.1+cu121.html

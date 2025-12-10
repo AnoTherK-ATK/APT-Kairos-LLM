@@ -1,6 +1,12 @@
 artifact/*
 e3/*
 .idea/*
-__pycache__/*
+**/__pycache__/*
 experiment_results/*
 saved_models/*
+config1.json
+*.zip
+llama/*
+inference_results/*
+test.png
+*.log

@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     # Validation date
     anomalous_queue_scores = []
-    history_list = torch.load(f"{artifact_dir}/graph_4_5_history_list")
+    history_list = torch.load(f"{artifact_dir}/graph_4_5_history_list", weights_only=False)
     for hl in history_list:
         anomaly_score = 0
         for hq in hl:
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     for f in filelist:
         pred_label[f] = 0
 
-    history_list = torch.load(f"{artifact_dir}/graph_4_6_history_list")
+    history_list = torch.load(f"{artifact_dir}/graph_4_6_history_list", weights_only=False)
     for hl in history_list:
         anomaly_score = 0
         for hq in hl:
@@ -148,7 +148,7 @@ if __name__ == "__main__":
                 pred_label[i] = 1
             logger.info(f"Anomaly score: {anomaly_score}")
 
-    history_list = torch.load(f"{artifact_dir}/graph_4_7_history_list")
+    history_list = torch.load(f"{artifact_dir}/graph_4_7_history_list", weights_only=False)
     for hl in history_list:
         anomaly_score = 0
         for hq in hl:

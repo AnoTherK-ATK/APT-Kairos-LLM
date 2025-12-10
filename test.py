@@ -168,7 +168,7 @@ if __name__ == "__main__":
     graph_4_3, graph_4_4, graph_4_5, graph_4_6, graph_4_7 = load_data()
 
     # load trained model
-    memory, gnn, link_pred, neighbor_loader = torch.load(f"{models_dir}/models.pt",map_location=device, weights_only=False)
+    memory, gnn, link_pred, neighbor_loader = torch.load(f"{models_dir}models.pt",map_location=device, weights_only=False)
 
     # Reconstruct the edges in each day
     test(inference_data=graph_4_3,

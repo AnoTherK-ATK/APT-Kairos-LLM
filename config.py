@@ -5,11 +5,13 @@
 ########################################################
 
 # The directory of the raw logs
-raw_dir = "/home/anotherk/kairos312/DARPA/CADETS_E3/e3/"
+raw_dir = "/home/anotherk/e3/"
+
+
 
 # The directory to save all artifacts
 artifact_dir = "./artifact/"
-
+ANOMALOUS_GRAPH_DATE = f"{artifact_dir}graph_4_6"
 saved_model_dir = "./saved_models/"
 
 # The directory to save the vectorized graphs
@@ -143,5 +145,5 @@ time_window_size = 60000000000 * 15
 #
 ########################################################
 
-beta_day6 = 100
-beta_day7 = 100
+beta_day6 = 50
+beta_day7 = 50

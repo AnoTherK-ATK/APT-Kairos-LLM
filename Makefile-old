@@ -6,6 +6,8 @@ prepare:
 	rm -rf ./artifact/
 	mkdir -p ./artifact/
 
+
+
 # --- DATABASE SETUP ---
 # Target này chạy script db.sh với quyền sudo và truyền biến môi trường
 setup_db:
@@ -48,8 +50,6 @@ train_gat:
 	python train.py --model gat --epoch $(EPOCHS)
 	cp ./artifact/models/models.pt ./saved_models/models_gat.pt
 
-# --- INFERENCE & ANALYSIS TARGETS ---
-
 test:
 	python test.py
 
@@ -62,9 +62,6 @@ evaluation:
 attack_investigation:
 	python attack_investigation.py
 
-# [MỚI] Target chạy GNNExplainer để trích xuất Critical Path
-explain:
-	python run_explainer_pipeline.py
 
 # Helper group
 anomaly_detection: anomalous_queue evaluation
@@ -72,25 +69,20 @@ anomaly_detection: anomalous_queue evaluation
 preprocess: prepare create_database embed_graphs
 
 # =============================================================
-# PIPELINES
-# =============================================================
+pipeline: preprocess train_unimp test anomaly_detection attack_investigation
 
-explainer: embed_graphs test anomaly_detection attack_investigation explain
+# Pipeline chuẩn (UniMP)
+pipeline_unimp: prepare embed_graphs train_unimp test anomaly_detection
 
-# Pipeline chuẩn đầy đủ (UniMP + Louvain + GNNExplainer)
-pipeline: prepare embed_graphs train_unimp test anomaly_detection attack_investigation explain
+# Pipeline cho GraphSAGE
+pipeline_sage: prepare embed_graphs train_sage test anomaly_detection
 
-# Pipeline cho UniMP (GAT-based) - Đầy đủ
-pipeline_unimp: prepare embed_graphs train_unimp test anomaly_detection attack_investigation explain
+# Pipeline cho GCN
+pipeline_gcn: prepare embed_graphs train_gcn test anomaly_detection
 
-# Pipeline cho GraphSAGE - Đầy đủ
-pipeline_sage: prepare embed_graphs train_sage test anomaly_detection attack_investigation explain
+# Pipeline cho RGCN
+pipeline_rgcn: prepare embed_graphs train_rgcn test anomaly_detection
 
-# Pipeline cho GCN - Đầy đủ
-pipeline_gcn: prepare embed_graphs train_gcn test anomaly_detection attack_investigation explain
+# Pipeline cho GAT
+pipeline_gat: prepare embed_graphs train_gat test anomaly_detection
 
-# Pipeline cho RGCN - Đầy đủ
-pipeline_rgcn: prepare embed_graphs train_rgcn test anomaly_detection attack_investigation explain
-
-# Pipeline cho GAT - Đầy đủ
-pipeline_gat: prepare embed_graphs train_gat test anomaly_detection attack_investigation explain

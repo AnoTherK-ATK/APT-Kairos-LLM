@@ -26,6 +26,7 @@ fi
 for model in "${MODELS[@]}"
 do
     rm ./artifact/evaluation.log
+    mkdir -p ./artifact/models
     # Kiểm tra xem file model có tồn tại không
     SOURCE_MODEL="$MODEL_DIR/models_$model.pt"
 
@@ -41,18 +42,19 @@ do
 
     # 1. Copy model về tên mặc định để test.py đọc
     # (Lý do: test.py mặc định load 'models.pt')
-    cp "$SOURCE_MODEL" "$MODEL_DIR/models.pt"
+    cp "$SOURCE_MODEL" "$ARTIFACT_DIR/models/models.pt"
     echo "   [+] Đã nạp trọng số (weights) thành công."
+
 
     # 2. Chạy Test (Tính Loss cho từng cạnh)
     # Bước này sẽ ghi đè các file .txt trong artifact/graph_4_x
     echo "   [+] Đang chạy Test (Reconstruction)..."
-    python test.py > /dev/null 2>&1 # Ẩn bớt log rác nếu muốn
+    python test.py  # Ẩn bớt log rác nếu muốn
 
     # 3. Chạy Xây dựng hàng đợi bất thường
     # Bước này dùng kết quả của bước 2
     echo "   [+] Đang xây dựng hàng đợi bất thường..."
-    python anomalous_queue_construction.py > /dev/null 2>&1
+    python anomalous_queue_construction.py 
 
     # 4. Chạy Đánh giá
     echo "   [+] Đang tính toán chỉ số (Precision/Recall)..."
@@ -75,7 +77,7 @@ echo "========================================================"
 
 # Gọi file python vẽ biểu đồ (dùng lại file plot_results.py ở câu trả lời trước)
 if [ -f "plot_results.py" ]; then
-    python plot_results.py
+    python plot_results.py "$RESULT_DIR"
 else
     echo "⚠️ Không tìm thấy file plot_results.py để vẽ biểu đồ."
 fi

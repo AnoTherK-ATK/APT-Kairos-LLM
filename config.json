@@ -1,0 +1,11 @@
+{
+  "llama7b-hf" : {
+        "model_id": "Llama-2-7b-chat-hf",
+        "cache_dir": "./llama",
+        "prompt_token_cost": 0.0,
+        "response_token_cost": 0.0,
+        "temperature": 0.6,
+        "top_k": 10,
+        "max_tokens": 4096
+  }
+}

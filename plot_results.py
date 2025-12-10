@@ -3,10 +3,12 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import sys
 
 # --- CẤU HÌNH ---
 # Thư mục chứa các file log (kết quả chạy từ run_experiments.sh)
-RESULTS_DIR = "./experiment_results"
+
+RESULTS_DIR = ("./experiment_results" if len(sys.argv) < 2 else sys.argv[1])
 
 
 def parse_log_file(filepath):

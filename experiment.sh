@@ -20,7 +20,7 @@ echo ">> Database đã sẵn sàng."
 # Danh sách các mô hình muốn chạy thử nghiệm
 # Đảm bảo tên này khớp với tên target trong Makefile (ví dụ: pipeline_unimp, pipeline_sage)
 # Nếu bạn chưa cập nhật Makefile cho gcn/rgcn thì bỏ chúng ra khỏi list dưới đây
-MODELS=("unimp" "sage" "gcn" "rgcn" "gat")
+MODELS=("sage" "gcn" "rgcn")
 
 echo "=================================================="
 echo "BẮT ĐẦU CHẠY THỰC NGHIỆM TỰ ĐỘNG KAIROS"
