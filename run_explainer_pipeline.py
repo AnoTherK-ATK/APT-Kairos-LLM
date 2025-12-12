@@ -16,7 +16,7 @@ from explainer import TemporalGNNExplainer
 
 # --- CẤU HÌNH ---
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-HISTORY_FILE = f"{artifact_dir}graph_4_6_history_list"
+HISTORY_FILES = [f"{artifact_dir}graph_4_{day}_history_list" for day in [6, 11, 12, 13]]
 MODEL_PATH = f"{models_dir}models.pt"
 TEST_DATA_PATH = f"{graphs_dir}graph_4_6.TemporalData.simple"
 
@@ -138,7 +138,7 @@ def load_kairos_model():
 
 
 def main():
-    if not os.path.exists(HISTORY_FILE):
+    if not os.path.exists(len(HISTORY_FILES)):
         print("History file not found.");
         return
 
@@ -151,102 +151,104 @@ def main():
 
     memory, gnn, link_pred, neighbor_loader = load_kairos_model()
     replayer = StreamReplayer(full_data, memory, neighbor_loader, DEVICE)
-
-    history_list = torch.load(HISTORY_FILE, weights_only=False)
-    best_queue = max(history_list, key=lambda q: sum(tw['loss'] for tw in q))
-
-    explainer = TemporalGNNExplainer(
-        model={'gnn': gnn, 'link_pred': link_pred},
-        criterion=torch.nn.CrossEntropyLoss(),
-        epochs=30, lr=0.05, device=DEVICE
-    )
-
     critical_path = nx.DiGraph()
     louvain_input_graph = nx.DiGraph()
+    summary_graph = nx.DiGraph()
+    for HISTORY_FILE in HISTORY_FILES:
+        history_list = torch.load(HISTORY_FILE, weights_only=False)
+        best_queue = max(history_list, key=lambda q: sum(tw['loss'] for tw in q))
 
-    sorted_windows = sorted(best_queue, key=lambda x: x['name'])
+        explainer = TemporalGNNExplainer(
+            model={'gnn': gnn, 'link_pred': link_pred},
+            criterion=torch.nn.CrossEntropyLoss(),
+            epochs=30, lr=0.05, device=DEVICE
+        )
 
-    for window in sorted_windows:
-        print(f"\n>>> Processing Window: {window['name']}")
-        log_path = f"{ANOMALOUS_GRAPH_DATE}/{window['name']}"
-        if not os.path.exists(log_path): continue
 
-        anomalous_events = []
-        with open(log_path, 'r') as f:
-            for line in f: anomalous_events.append(eval(line.strip()))
-        if not anomalous_events: continue
+        sorted_windows = sorted(best_queue, key=lambda x: x['name'])
 
-        replayer.advance_to(min([e['time'] for e in anomalous_events]))
+        ANOMALOUS_GRAPH_DATE = f"{artifact_dir}graph_4_{HISTORY_FILE.split('_')[2]}"
+        for window in sorted_windows:
+            print(f"\n>>> Processing Window: {window['name']}")
+            log_path = f"{ANOMALOUS_GRAPH_DATE}/{window['name']}"
+            if not os.path.exists(log_path): continue
+            print("Path exist")
+            anomalous_events = []
+            with open(log_path, 'r') as f:
+                for line in f: anomalous_events.append(eval(line.strip()))
+            if not anomalous_events: continue
 
-        # [UPDATE: THRESHOLD LOGIC]
-        # Tính thống kê Loss trong Time Window hiện tại
-        losses = [e['loss'] for e in anomalous_events]
-        mean_loss = np.mean(losses)
-        std_loss = np.std(losses)
+            replayer.advance_to(min([e['time'] for e in anomalous_events]))
 
-        # Thiết lập ngưỡng (Mean + 3*Sigma: Bắt sự kiện cực kỳ bất thường)
-        # Bạn có thể giảm số 3 xuống 2 hoặc 1.5 nếu muốn bắt nhiều hơn
-        threshold = mean_loss + 1.5 * std_loss
+            # [UPDATE: THRESHOLD LOGIC]
+            # Tính thống kê Loss trong Time Window hiện tại
+            losses = [e['loss'] for e in anomalous_events]
+            mean_loss = np.mean(losses)
+            std_loss = np.std(losses)
 
-        # Lọc các sự kiện vượt ngưỡng
-        target_events = [e for e in anomalous_events if e['loss'] > threshold]
+            # Thiết lập ngưỡng (Mean + 3*Sigma: Bắt sự kiện cực kỳ bất thường)
+            # Bạn có thể giảm số 3 xuống 2 hoặc 1.5 nếu muốn bắt nhiều hơn
+            threshold = mean_loss + 1.5 * std_loss
 
-        print(f"   [Stats] Mean Loss: {mean_loss:.4f} | Std: {std_loss:.4f} | Threshold (3-sigma): {threshold:.4f}")
-        print(
-            f"   [Filter] Found {len(target_events)} critical events (out of {len(anomalous_events)}) exceeding threshold.")
+            # Lọc các sự kiện vượt ngưỡng
+            target_events = [e for e in anomalous_events if e['loss'] > threshold]
 
-        # Fallback: Nếu ngưỡng quá cao không bắt được gì, lấy Top 10 để đảm bảo có kết quả
-        if len(target_events) == 0:
-            print("   [Warn] No events exceed threshold. Falling back to Top-10.")
-            target_events = sorted(anomalous_events, key=lambda x: x['loss'], reverse=True)[:10]
+            print(f"   [Stats] Mean Loss: {mean_loss:.4f} | Std: {std_loss:.4f} | Threshold (3-sigma): {threshold:.4f}")
+            print(
+                f"   [Filter] Found {len(target_events)} critical events (out of {len(anomalous_events)}) exceeding threshold.")
 
-        for event in tqdm(target_events, desc="Explaining"):
-            try:
-                src_ids, dst_ids, weights = explainer.explain_edge(
-                    event['srcnode'], event['dstnode'], event['time'],
-                    full_data, memory, neighbor_loader
-                )
+            # Fallback: Nếu ngưỡng quá cao không bắt được gì, lấy Top 10 để đảm bảo có kết quả
+            if len(target_events) == 0:
+                print("   [Warn] No events exceed threshold. Falling back to Top-10.")
+                target_events = sorted(anomalous_events, key=lambda x: x['loss'], reverse=True)[:10]
 
-                for i in range(len(src_ids)):
-                    u_id, v_id, w = src_ids[i], dst_ids[i], weights[i]
-                    u_label = get_label_from_db(u_id, nodeid2msg)
-                    v_label = get_label_from_db(v_id, nodeid2msg)
+            for event in tqdm(target_events, desc="Explaining"):
+                try:
+                    src_ids, dst_ids, weights = explainer.explain_edge(
+                        event['srcnode'], event['dstnode'], event['time'],
+                        full_data, memory, neighbor_loader
+                    )
 
-                    u_hash, v_hash = str(hashgen(u_label)), str(hashgen(v_label))
-                    add_node_with_label(critical_path, u_hash, u_label)
-                    add_node_with_label(critical_path, v_hash, v_label)
+                    for i in range(len(src_ids)):
+                        u_id, v_id, w = src_ids[i], dst_ids[i], weights[i]
+                        u_label = get_label_from_db(u_id, nodeid2msg)
+                        v_label = get_label_from_db(v_id, nodeid2msg)
 
-                    if w > 0.1:
-                        critical_path.add_edge(u_hash, v_hash, weight=float(w), type='explainer')
-            except Exception as e:
-                pass
+                        u_hash, v_hash = str(hashgen(u_label)), str(hashgen(v_label))
+                        add_node_with_label(critical_path, u_hash, u_label)
+                        add_node_with_label(critical_path, v_hash, v_label)
 
-        # --- LOUVAIN INPUT (Dùng get_clean_label) ---
-        for event in anomalous_events:
-            # Vẫn dùng logic cũ cho Louvain (Loss > Avg của Window) để có cái nhìn tổng quan
-            if event['loss'] > window['loss']:
-                src_clean = get_clean_label(event['srcmsg'])
-                dst_clean = get_clean_label(event['dstmsg'])
-                u_hash, v_hash = str(hashgen(src_clean)), str(hashgen(dst_clean))
+                        if w > 0.4:
+                            critical_path.add_edge(u_hash, v_hash, weight=float(w), type='explainer')
+                except Exception as e:
+                    pass
 
-                add_node_with_label(louvain_input_graph, u_hash, src_clean)
-                add_node_with_label(louvain_input_graph, v_hash, dst_clean)
-                louvain_input_graph.add_edge(u_hash, v_hash)
+            # --- LOUVAIN INPUT (Dùng get_clean_label) ---
+            for event in anomalous_events:
+                # Vẫn dùng logic cũ cho Louvain (Loss > Avg của Window) để có cái nhìn tổng quan
+                if event['loss'] > window['loss']:
+                    src_clean = get_clean_label(event['srcmsg'])
+                    dst_clean = get_clean_label(event['dstmsg'])
+                    u_hash, v_hash = str(hashgen(src_clean)), str(hashgen(dst_clean))
 
-    if louvain_input_graph.number_of_edges() == 0: return
+                    add_node_with_label(louvain_input_graph, u_hash, src_clean)
+                    add_node_with_label(louvain_input_graph, v_hash, dst_clean)
+                    louvain_input_graph.add_edge(u_hash, v_hash)
 
-    print(f"\n>>> Running Louvain on {louvain_input_graph.number_of_edges()} edges...")
-    undirected_g = louvain_input_graph.to_undirected()
-    try:
-        partition = attack_investigation.community_louvain.best_partition(undirected_g)
-        summary_graph = nx.DiGraph()
-        for node, attr in louvain_input_graph.nodes(data=True):
-            if node in partition: summary_graph.add_node(node, **attr)
-        for u, v in louvain_input_graph.edges():
-            if u in partition and v in partition and partition[u] == partition[v]:
-                summary_graph.add_edge(u, v)
-    except:
-        summary_graph = nx.DiGraph()
+        if louvain_input_graph.number_of_edges() == 0: return
+
+        print(f"\n>>> Running Louvain on {louvain_input_graph.number_of_edges()} edges...")
+        undirected_g = louvain_input_graph.to_undirected()
+        try:
+            partition = attack_investigation.community_louvain.best_partition(undirected_g)
+
+            for node, attr in louvain_input_graph.nodes(data=True):
+                if node in partition: summary_graph.add_node(node, **attr)
+            for u, v in louvain_input_graph.edges():
+                if u in partition and v in partition and partition[u] == partition[v]:
+                    summary_graph.add_edge(u, v)
+        except:
+            summary_graph = nx.DiGraph()
 
     print("\n>>> Finding Intersection (Verified Attack Path)...")
     verified_graph_struct = nx.intersection(critical_path, summary_graph)

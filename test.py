@@ -152,9 +152,11 @@ def load_data():
 
     # Testing set
     graph_4_6 = torch.load(graphs_dir + "/graph_4_6.TemporalData.simple", weights_only=False).to(device=device)
-    graph_4_7 = torch.load(graphs_dir + "/graph_4_7.TemporalData.simple", weights_only=False).to(device=device)
+    graph_4_11 = torch.load(graphs_dir + "/graph_4_11.TemporalData.simple", weights_only=False).to(device=device)
+    graph_4_12 = torch.load(graphs_dir + "/graph_4_12.TemporalData.simple", weights_only=False).to(device=device)
+    graph_4_13 = torch.load(graphs_dir + "/graph_4_13.TemporalData.simple", weights_only=False).to(device=device)
 
-    return [graph_4_3, graph_4_4, graph_4_5, graph_4_6, graph_4_7]
+    return [graph_4_3, graph_4_4, graph_4_5, graph_4_6, graph_4_11, graph_4_12, graph_4_13]
 
 
 if __name__ == "__main__":
@@ -165,7 +167,7 @@ if __name__ == "__main__":
     nodeid2msg = gen_nodeid2msg(cur=cur)
 
     # Load data
-    graph_4_3, graph_4_4, graph_4_5, graph_4_6, graph_4_7 = load_data()
+    graph_4_3, graph_4_4, graph_4_5, graph_4_6, graph_4_11, graph_4_12, graph_4_13 = load_data()
 
     # load trained model
     memory, gnn, link_pred, neighbor_loader = torch.load(f"{models_dir}models.pt",map_location=device, weights_only=False)
@@ -203,10 +205,27 @@ if __name__ == "__main__":
          nodeid2msg=nodeid2msg,
          path=artifact_dir + "graph_4_6")
 
-    test(inference_data=graph_4_7,
+    test(inference_data=graph_4_11,
          memory=memory,
          gnn=gnn,
          link_pred=link_pred,
          neighbor_loader=neighbor_loader,
          nodeid2msg=nodeid2msg,
-         path=artifact_dir + "graph_4_7")
+         path=artifact_dir + "graph_4_11")
+
+    test(inference_data=graph_4_12,
+         memory=memory,
+         gnn=gnn,
+         link_pred=link_pred,
+         neighbor_loader=neighbor_loader,
+         nodeid2msg=nodeid2msg,
+         path=artifact_dir + "graph_4_12")
+
+    test(inference_data=graph_4_13,
+         memory=memory,
+         gnn=gnn,
+         link_pred=link_pred,
+         neighbor_loader=neighbor_loader,
+         nodeid2msg=nodeid2msg,
+         path=artifact_dir + "graph_4_13")
+

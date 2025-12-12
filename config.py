@@ -11,7 +11,7 @@ raw_dir = "/home/anotherk/e3/"
 
 # The directory to save all artifacts
 artifact_dir = "./artifact/"
-ANOMALOUS_GRAPH_DATE = f"{artifact_dir}graph_4_6"
+
 saved_model_dir = "./saved_models/"
 
 # The directory to save the vectorized graphs

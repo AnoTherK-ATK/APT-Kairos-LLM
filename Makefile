@@ -75,7 +75,7 @@ preprocess: prepare create_database embed_graphs
 # PIPELINES
 # =============================================================
 
-explainer: embed_graphs test anomaly_detection attack_investigation explain
+explainer: test anomaly_detection attack_investigation explain
 
 # Pipeline chuẩn đầy đủ (UniMP + Louvain + GNNExplainer)
 pipeline: prepare embed_graphs train_unimp test anomaly_detection attack_investigation explain

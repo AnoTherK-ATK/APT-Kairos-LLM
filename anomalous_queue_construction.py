@@ -214,6 +214,21 @@ if __name__ == "__main__":
     history_list = anomalous_queue_construction(
         node_IDF=node_IDF,
         tw_list=tw_list,
-        graph_dir_path=f"{artifact_dir}/graph_4_7/"
+        graph_dir_path=f"{artifact_dir}/graph_4_11/"
     )
-    torch.save(history_list, f"{artifact_dir}/graph_4_7_history_list")
+    torch.save(history_list, f"{artifact_dir}/graph_4_11_history_list")
+
+    history_list = anomalous_queue_construction(
+        node_IDF=node_IDF,
+        tw_list=tw_list,
+        graph_dir_path=f"{artifact_dir}/graph_4_12/"
+    )
+    torch.save(history_list, f"{artifact_dir}/graph_4_12_history_list")
+
+    history_list = anomalous_queue_construction(
+        node_IDF=node_IDF,
+        tw_list=tw_list,
+        graph_dir_path=f"{artifact_dir}/graph_4_13/"
+    )
+    torch.save(history_list, f"{artifact_dir}/graph_4_13_history_list")
+
