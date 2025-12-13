@@ -249,6 +249,7 @@ def main():
                 for u, v in louvain_input_graph.edges():
                     if u in partition and v in partition:
                         if partition[u] == partition[v]:
+
                             summary_graph.add_edge(u, v)
                         # Tùy chọn: Bạn có muốn giữ lại các cạnh nối giữa các community không?
                         # Nếu muốn giữ lại "cầu nối" tấn công, hãy bỏ điều kiện partition[u] == partition[v]
