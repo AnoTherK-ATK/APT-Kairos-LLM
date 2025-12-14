@@ -353,9 +353,55 @@ def main():
         print("\n[WARN] Intersection resulted in 0 edges. Creating graph from Critical Path only.")
         verified_graph = critical_path.copy()
 
+    # --- 5. FIND LCA (ROOT CAUSE ANALYSIS) ---
+    print("\n>>> Identifying Root Cause (LCA)...")
+
+    # Lấy danh sách các node trong đồ thị kết quả (Verified Graph)
+    target_nodes = set(verified_graph.nodes())
+
+    # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
+    lca_node = find_lca_for_set(critical_path, target_nodes)
+
+    lca_label = "Unknown"
+    if lca_node:
+        lca_label = critical_path.nodes[lca_node].get('label', lca_node)
+        print(f"   [FOUND] LCA / Potential Root Cause: {lca_label} (Hash: {lca_node})")
+
+        # Thêm LCA vào verified_graph nếu nó chưa có (để hiển thị nguyên nhân gốc)
+        if lca_node not in verified_graph:
+            verified_graph.add_node(lca_node, label=lca_label)
+            # Thêm các cạnh từ LCA đến các node trong verified_graph (nếu có trong critical_path)
+            # Để nối LCA vào đồ thị hiển thị
+            for target in list(verified_graph.nodes()):
+                if target != lca_node:
+                    # Tìm đường đi ngắn nhất từ LCA đến target trong critical_path để nối lại
+                    try:
+                        path = nx.shortest_path(critical_path, source=lca_node, target=target)
+                        # Thêm đường đi này vào verified_graph để liền mạch
+                        for i in range(len(path) - 1):
+                            u, v = path[i], path[i + 1]
+                            u_l = critical_path.nodes[u].get('label', u)
+                            v_l = critical_path.nodes[v].get('label', v)
+                            verified_graph.add_node(u, label=u_l)
+                            verified_graph.add_node(v, label=v_l)
+                            verified_graph.add_edge(u, v)
+                    except nx.NetworkXNoPath:
+                        pass
+    else:
+        print("   [Info] LCA not found (Graph might be disjoint or too sparse).")
+
+    # --- VISUALIZATION ---
     apply_visual_style(verified_graph)
     apply_visual_style(critical_path)
     apply_visual_style(summary_graph)
+
+    # Highlight LCA Node
+    if lca_node and lca_node in verified_graph:
+        verified_graph.nodes[lca_node]['color'] = 'red'
+        verified_graph.nodes[lca_node]['fontcolor'] = 'red'
+        verified_graph.nodes[lca_node]['penwidth'] = '2.0'
+        # Nếu muốn label rõ hơn:
+        verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
 
     print(f"Stats:")
     print(f" - Critical Path Edges: {critical_path.number_of_edges()}")
@@ -363,33 +409,26 @@ def main():
     print(f" - VERIFIED ATTACK EDGES: {verified_graph.number_of_edges()}")
 
     if verified_graph.number_of_edges() > 0:
-        # 1. Verified Graph (Kết quả cuối cùng)
+        # Xuất file ảnh (giữ nguyên logic phần trước tôi đã gửi)
         output_dot = f"{artifact_dir}verified_attack_path.dot"
         output_png = f"{artifact_dir}verified_attack_path.png"
         nx.drawing.nx_pydot.write_dot(verified_graph, output_dot)
 
-        # 2. Summary Graph (Kết quả Louvain - Đã có Label)
         summary_dot = f"{artifact_dir}summary_graph.dot"
         summary_png = f"{artifact_dir}summary_graph.png"
         nx.drawing.nx_pydot.write_dot(summary_graph, summary_dot)
 
-        # 3. Critical Path (Kết quả Explainer)
         critical_dot = f"{artifact_dir}critical_path.dot"
         critical_png = f"{artifact_dir}critical_path.png"
         nx.drawing.nx_pydot.write_dot(critical_path, critical_dot)
 
         try:
-            # Convert cả 3 file sang PNG
             os.system(f"dot -Tpng {output_dot} -o {output_png}")
             os.system(f"dot -Tpng {summary_dot} -o {summary_png}")
             os.system(f"dot -Tpng {critical_dot} -o {critical_png}")
-
-            print(f"SUCCESS: Results saved:")
-            print(f"  - Final: {output_png}")
-            print(f"  - Summary (Louvain): {summary_png}")
-            print(f"  - Critical (Explainer): {critical_png}")
+            print(f"SUCCESS: Results saved to {output_png}")
         except:
-            print("Saved dot files only (Graphviz 'dot' command not found/failed).")
+            print("Saved dot files only.")
     else:
         print("No graph generated.")
 
