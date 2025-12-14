@@ -63,6 +63,66 @@ def add_node_with_label(graph, node_hash, label):
         graph.add_node(node_hash, label=label)
 
 
+def find_lca_for_set(graph, nodes_of_interest):
+    """
+    Tìm Lowest Common Ancestor (LCA) cho một tập hợp các node.
+    LCA là node tổ tiên chung của tất cả các node trong tập hợp,
+    và là node nằm 'thấp nhất' (xa root nhất/gần các node con nhất).
+    """
+    if not nodes_of_interest:
+        return None
+
+    nodes_list = list(nodes_of_interest)
+
+    # Bước 1: Lấy node đầu tiên làm cơ sở
+    if nodes_list[0] not in graph:
+        return None
+
+    # Tập hợp tổ tiên chung khởi tạo bằng tổ tiên của node đầu tiên + chính nó
+    common_ancestors = nx.ancestors(graph, nodes_list[0])
+    common_ancestors.add(nodes_list[0])
+
+    # Bước 2: Giao với tổ tiên của các node còn lại
+    for node in nodes_list[1:]:
+        if node not in graph:
+            continue
+        curr_ancestors = nx.ancestors(graph, node)
+        curr_ancestors.add(node)
+        common_ancestors.intersection_update(curr_ancestors)
+
+    if not common_ancestors:
+        print("   [Info] No single common ancestor found for all nodes (disjoint paths).")
+        return None
+
+    # Bước 3: Tìm LCA "thấp nhất" trong số các tổ tiên chung
+    # LCA là node mà KHÔNG có node con nào nằm trong tập common_ancestors
+    # (Tức là nó là điểm cuối cùng của phần chung trước khi rẽ nhánh)
+    lca_node = None
+    max_depth = -1
+
+    # Cách đơn giản: Chọn node trong common_ancestors có đường đi dài nhất từ một root nào đó
+    # Hoặc đơn giản hơn: Kiểm tra node nào không có out-edge tới bất kỳ node nào khác trong common_ancestors
+
+    candidates = []
+    for anc in common_ancestors:
+        is_lowest = True
+        # Kiểm tra xem anc có trỏ tới node nào khác trong common_ancestors không
+        # Nếu có, nghĩa là anc nằm "trên", chưa phải lowest
+        for neighbor in graph.successors(anc):
+            if neighbor in common_ancestors:
+                is_lowest = False
+                break
+        if is_lowest:
+            candidates.append(anc)
+
+    if candidates:
+        # Nếu có nhiều ứng viên (do đồ thị phức tạp), chọn node có bậc ra (out-degree) lớn nhất trong graph gốc
+        # hoặc đơn giản lấy cái đầu tiên.
+        lca_node = candidates[0]
+
+    return lca_node
+
+
 def apply_visual_style(graph):
     graph.graph['rankdir'] = 'LR'
     graph.graph['splines'] = 'true'
@@ -192,6 +252,7 @@ def main():
             std_loss = np.std(losses)
             threshold = mean_loss + 1.5 * std_loss
 
+            print(f"total events: {len(anomalous_events)} | threshold: {threshold}")
             # Chỉ chạy Explainer trên các sự kiện High Loss
             target_events = [e for e in anomalous_events if e['loss'] > threshold]
 
@@ -219,7 +280,7 @@ def main():
                         add_node_with_label(critical_path, u_hash, u_label)
                         add_node_with_label(critical_path, v_hash, v_label)
 
-                        if w > 0.4:
+                        if w > 0.1:
                             critical_path.add_edge(u_hash, v_hash, weight=float(w), type='explainer')
                 except Exception as e:
                     # print(f"Error explaining: {e}")
@@ -239,22 +300,29 @@ def main():
                     louvain_input_graph.add_edge(u_hash, v_hash)
 
         # --- 3. RUN LOUVAIN & UPDATE SUMMARY GRAPH ---
-        if louvain_input_graph.number_of_edges() > 0:
-            undirected_g = louvain_input_graph.to_undirected()
-            try:
-                # print(f"   Running Louvain on {louvain_input_graph.number_of_edges()} edges...")
-                partition = attack_investigation.community_louvain.best_partition(undirected_g)
+                # --- 3. RUN LOUVAIN & UPDATE SUMMARY GRAPH ---
+            if louvain_input_graph.number_of_edges() > 0:
+                undirected_g = louvain_input_graph.to_undirected()
+                try:
+                    # print(f"   Running Louvain on {louvain_input_graph.number_of_edges()} edges...")
+                    partition = attack_investigation.community_louvain.best_partition(undirected_g)
 
-                # Chỉ thêm cạnh vào summary_graph nếu 2 node cùng community
-                for u, v in louvain_input_graph.edges():
-                    if u in partition and v in partition:
-                        if partition[u] == partition[v]:
+                    # Chỉ thêm cạnh vào summary_graph nếu 2 node cùng community
+                    for u, v in louvain_input_graph.edges():
+                        if u in partition and v in partition:
+                            if partition[u] == partition[v]:  # Cùng cộng đồng -> Giữ lại
+                                summary_graph.add_edge(u, v)
 
-                            summary_graph.add_edge(u, v)
-                        # Tùy chọn: Bạn có muốn giữ lại các cạnh nối giữa các community không?
-                        # Nếu muốn giữ lại "cầu nối" tấn công, hãy bỏ điều kiện partition[u] == partition[v]
-            except Exception as e:
-                print(f"Louvain Error: {e}")
+                                # [FIX] Copy label từ louvain_input_graph sang summary_graph
+                                # Vì add_edge không tự động copy thuộc tính node
+                                if 'label' not in summary_graph.nodes[u]:
+                                    summary_graph.nodes[u]['label'] = louvain_input_graph.nodes[u].get('label', u)
+
+                                if 'label' not in summary_graph.nodes[v]:
+                                    summary_graph.nodes[v]['label'] = louvain_input_graph.nodes[v].get('label', v)
+
+                except Exception as e:
+                    print(f"Louvain Error: {e}")
 
     # --- 4. INTERSECTION & RESULT ---
     print("\n>>> Finding Intersection (Verified Attack Path)...")
@@ -295,16 +363,33 @@ def main():
     print(f" - VERIFIED ATTACK EDGES: {verified_graph.number_of_edges()}")
 
     if verified_graph.number_of_edges() > 0:
+        # 1. Verified Graph (Kết quả cuối cùng)
         output_dot = f"{artifact_dir}verified_attack_path.dot"
         output_png = f"{artifact_dir}verified_attack_path.png"
         nx.drawing.nx_pydot.write_dot(verified_graph, output_dot)
-        nx.drawing.nx_pydot.write_dot(summary_graph, f"{artifact_dir}summary_graph.dot")
-        nx.drawing.nx_pydot.write_dot(critical_path, f"{artifact_dir}critical_path.dot")
+
+        # 2. Summary Graph (Kết quả Louvain - Đã có Label)
+        summary_dot = f"{artifact_dir}summary_graph.dot"
+        summary_png = f"{artifact_dir}summary_graph.png"
+        nx.drawing.nx_pydot.write_dot(summary_graph, summary_dot)
+
+        # 3. Critical Path (Kết quả Explainer)
+        critical_dot = f"{artifact_dir}critical_path.dot"
+        critical_png = f"{artifact_dir}critical_path.png"
+        nx.drawing.nx_pydot.write_dot(critical_path, critical_dot)
+
         try:
+            # Convert cả 3 file sang PNG
             os.system(f"dot -Tpng {output_dot} -o {output_png}")
-            print(f"SUCCESS: Result saved to {output_png}")
+            os.system(f"dot -Tpng {summary_dot} -o {summary_png}")
+            os.system(f"dot -Tpng {critical_dot} -o {critical_png}")
+
+            print(f"SUCCESS: Results saved:")
+            print(f"  - Final: {output_png}")
+            print(f"  - Summary (Louvain): {summary_png}")
+            print(f"  - Critical (Explainer): {critical_png}")
         except:
-            print("Saved dot file (Graphviz not found/failed).")
+            print("Saved dot files only (Graphviz 'dot' command not found/failed).")
     else:
         print("No graph generated.")
 
