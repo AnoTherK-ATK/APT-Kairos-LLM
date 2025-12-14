@@ -270,6 +270,8 @@ def main():
                         full_data, memory, neighbor_loader
                     )
 
+                    timestamp = ns_time_to_datetime(event['time'])
+
                     for i in range(len(src_ids)):
                         u_id, v_id, w = src_ids[i], dst_ids[i], weights[i]
 
@@ -281,7 +283,7 @@ def main():
                         add_node_with_label(critical_path, v_hash, v_label)
 
                         if w > 0.1:
-                            critical_path.add_edge(u_hash, v_hash, weight=float(w), type='explainer')
+                            critical_path.add_edge(u_hash, v_hash, weight=float(w), type='explainer', label=timestamp)
                 except Exception as e:
                     # print(f"Error explaining: {e}")
                     pass
@@ -342,9 +344,13 @@ def main():
         # Lấy label từ critical_path (nơi chứa label chính xác nhất)
         u_lbl = critical_path.nodes[u].get('label', u)
         v_lbl = critical_path.nodes[v].get('label', v)
+
+        edge_data = critical_path.get_edge_data(u, v)
+        edge_label = edge_data.get('label', '') if edge_data else ''
+
         verified_graph.add_node(u, label=u_lbl)
         verified_graph.add_node(v, label=v_lbl)
-        verified_graph.add_edge(u, v)
+        verified_graph.add_edge(u, v, label=edge_label)
 
     # --- FALLBACK NẾU MẤT CẠNH QUÁ NHIỀU ---
     # Nếu verified graph rỗng, ta có thể lấy critical_path làm kết quả chính
