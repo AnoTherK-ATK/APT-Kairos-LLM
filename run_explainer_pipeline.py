@@ -123,6 +123,68 @@ def find_lca_for_set(graph, nodes_of_interest):
     return lca_node
 
 
+def find_multiple_lcas(graph, nodes_of_interest):
+    """
+    Tìm tập hợp các LCA tối thiểu để bao phủ tất cả nodes_of_interest.
+    Chiến lược: Greedy Set Cover kết hợp với tìm LCA cục bộ.
+    """
+    if not nodes_of_interest:
+        return []
+
+    # Chỉ xét các node có trong graph
+    target_nodes = set(n for n in nodes_of_interest if n in graph)
+    if not target_nodes:
+        return []
+
+    lca_roots = []
+    uncovered = target_nodes.copy()
+
+    while uncovered:
+        # 1. Đếm số lượng node mục tiêu mà mỗi tổ tiên có thể bao phủ
+        candidate_counts = {}
+
+        # Duyệt qua từng node chưa được cover để tìm tổ tiên của nó
+        for node in uncovered:
+            # Lấy tất cả tổ tiên và chính nó
+            ancestors = nx.ancestors(graph, node)
+            ancestors.add(node)
+
+            for anc in ancestors:
+                candidate_counts[anc] = candidate_counts.get(anc, 0) + 1
+
+        if not candidate_counts:
+            # Trường hợp đồ thị bị rời rạc hoàn toàn, không tìm thấy tổ tiên nào chung
+            # Fallback: Lấy chính các node còn lại làm root
+            print(f"   [Info] Cannot find common ancestors for remaining {len(uncovered)} nodes.")
+            lca_roots.extend(list(uncovered))
+            break
+
+        # 2. Chọn ứng viên bao phủ được nhiều node nhất (Greedy)
+        best_candidate = max(candidate_counts, key=candidate_counts.get)
+
+        # 3. Xác định cụm node được bao phủ bởi ứng viên này
+        # (Để tìm LCA chính xác thấp nhất cho cụm này, thay vì lấy best_candidate có thể ở quá cao)
+        covered_subset = set()
+        for node in uncovered:
+            if node == best_candidate or best_candidate in nx.ancestors(graph, node):
+                covered_subset.add(node)
+
+        # 4. Tìm LCA thấp nhất cho riêng cụm này (Refinement)
+        # Hàm find_lca_for_set đã có sẵn trong code của bạn
+        cluster_lca = find_lca_for_set(graph, covered_subset)
+
+        if cluster_lca:
+            lca_roots.append(cluster_lca)
+        else:
+            # Nếu không tìm được thấp hơn, dùng chính best_candidate
+            lca_roots.append(best_candidate)
+
+        # 5. Loại bỏ các node đã xử lý khỏi danh sách cần tìm
+        uncovered -= covered_subset
+
+    return lca_roots
+
+
 def apply_visual_style(graph):
     graph.graph['rankdir'] = 'LR'
     graph.graph['splines'] = 'true'
@@ -366,49 +428,68 @@ def main():
     target_nodes = set(verified_graph.nodes())
 
     # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
-    lca_node = find_lca_for_set(critical_path, target_nodes)
+    lca_nodes = find_multiple_lcas(summary_graph, target_nodes)
 
     lca_label = "Unknown"
-    if lca_node:
-        lca_label = critical_path.nodes[lca_node].get('label', lca_node)
-        print(f"   [FOUND] LCA / Potential Root Cause: {lca_label} (Hash: {lca_node})")
+    if lca_nodes:
+        print(f"   [FOUND] Identified {len(lca_nodes)} Root Cause(s).")
 
-        # Thêm LCA vào verified_graph nếu nó chưa có (để hiển thị nguyên nhân gốc)
-        if lca_node not in verified_graph:
-            verified_graph.add_node(lca_node, label=lca_label)
-            # Thêm các cạnh từ LCA đến các node trong verified_graph (nếu có trong critical_path)
-            # Để nối LCA vào đồ thị hiển thị
+        for idx, lca_node in enumerate(lca_nodes):
+            lca_label = summary_graph.nodes[lca_node].get('label', lca_node)
+            print(f"    - Root {idx + 1}: {lca_label} (Hash: {lca_node})")
+
+            # Thêm LCA vào verified_graph để hiển thị
+            if lca_node not in verified_graph:
+                verified_graph.add_node(lca_node, label=lca_label)
+
+            # Nối LCA với các node trong đồ thị (Tái tạo đường đi tấn công)
+            # Chỉ nối tới những node chưa có cha nào khác trong verified_graph để đỡ rối,
+            # hoặc nối tới tất cả target thuộc nhánh của nó.
             for target in list(verified_graph.nodes()):
-                if target != lca_node:
-                    # Tìm đường đi ngắn nhất từ LCA đến target trong critical_path để nối lại
-                    try:
-                        path = nx.shortest_path(critical_path, source=lca_node, target=target)
-                        # Thêm đường đi này vào verified_graph để liền mạch
+                if target == lca_node: continue
+
+                # Kiểm tra xem target có phải là hậu duệ của LCA này không
+                try:
+                    if nx.has_path(summary_graph, lca_node, target):
+                        path = nx.shortest_path(summary_graph, source=lca_node, target=target)
+
+                        # Thêm đường đi vào đồ thị
                         for i in range(len(path) - 1):
                             u, v = path[i], path[i + 1]
-                            u_l = critical_path.nodes[u].get('label', u)
-                            v_l = critical_path.nodes[v].get('label', v)
-                            verified_graph.add_node(u, label=u_l)
-                            verified_graph.add_node(v, label=v_l)
-                            verified_graph.add_edge(u, v)
-                    except nx.NetworkXNoPath:
-                        pass
-    else:
-        print("   [Info] LCA not found (Graph might be disjoint or too sparse).")
+                            # Copy thông tin node
+                            if u not in verified_graph:
+                                u_lbl = summary_graph.nodes[u].get('label', u)
+                                verified_graph.add_node(u, label=u_lbl)
+                            if v not in verified_graph:
+                                v_lbl = summary_graph.nodes[v].get('label', v)
+                                verified_graph.add_node(v, label=v_lbl)
+
+                            # Copy thông tin cạnh (bao gồm timestamp label nếu bạn đã làm bước trước)
+                            edge_data = summary_graph.get_edge_data(u, v)
+                            edge_label = edge_data.get('label', '') if edge_data else ''
+
+                            # Tránh thêm cạnh trùng lặp
+                            if not verified_graph.has_edge(u, v):
+                                verified_graph.add_edge(u, v, label=edge_label)
+                except Exception:
+                    pass
 
     # --- VISUALIZATION ---
-    apply_visual_style(verified_graph)
+
+            apply_visual_style(verified_graph)
+            # Highlight LCA Node
+            if lca_node and lca_node in verified_graph:
+                verified_graph.nodes[lca_node]['color'] = 'red'
+                verified_graph.nodes[lca_node]['fontcolor'] = 'red'
+                verified_graph.nodes[lca_node]['penwidth'] = '2.0'
+                # Nếu muốn label rõ hơn:
+                verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
+    else:
+        print("   [Info] LCA not found (Graph might be too disjoint).")
+
+
     apply_visual_style(critical_path)
     apply_visual_style(summary_graph)
-
-    # Highlight LCA Node
-    if lca_node and lca_node in verified_graph:
-        verified_graph.nodes[lca_node]['color'] = 'red'
-        verified_graph.nodes[lca_node]['fontcolor'] = 'red'
-        verified_graph.nodes[lca_node]['penwidth'] = '2.0'
-        # Nếu muốn label rõ hơn:
-        verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
-
     print(f"Stats:")
     print(f" - Critical Path Edges: {critical_path.number_of_edges()}")
     print(f" - Summary Graph Edges: {summary_graph.number_of_edges()}")
