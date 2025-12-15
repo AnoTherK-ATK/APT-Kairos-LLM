@@ -209,7 +209,7 @@ def apply_visual_style(graph):
     for u, v, data in graph.edges(data=True):
         data['color'] = 'blue'
         data['fontcolor'] = 'black'
-        data['fontsize'] = '8'
+        data['fontsize'] = '6'  # [MODIFIED] Giảm xuống 6 hoặc 7 cho gọn
         data['penwidth'] = '1.0'
         data['arrowsize'] = '0.8'
 
@@ -327,7 +327,7 @@ def main():
             # --- 1. BUILD CRITICAL PATH (EXPLAINER) ---
             for event in tqdm(target_events, desc="Explaining"):
                 try:
-                    src_ids, dst_ids, weights = explainer.explain_edge(
+                    src_ids, dst_ids, weights, types = explainer.explain_edge(
                         event['srcnode'], event['dstnode'], event['time'],
                         full_data, memory, neighbor_loader
                     )
@@ -335,8 +335,9 @@ def main():
                     timestamp = ns_time_to_datetime(event['time'])
 
                     for i in range(len(src_ids)):
-                        u_id, v_id, w = src_ids[i], dst_ids[i], weights[i]
-
+                        u_id, v_id, w, t_idx = src_ids[i], dst_ids[i], weights[i], types[i]
+                        t_idx_int = int(t_idx)
+                        edge_type_str = rel2id.get(t_idx_int, f"Type_{t_idx_int}")
                         # [FIX] Sử dụng hàm thống nhất get_node_data
                         u_hash, u_label = get_node_data(u_id, nodeid2msg)
                         v_hash, v_label = get_node_data(v_id, nodeid2msg)
@@ -345,7 +346,16 @@ def main():
                         add_node_with_label(critical_path, v_hash, v_label)
 
                         if w > 0.1:
-                            critical_path.add_edge(u_hash, v_hash, weight=float(w), type='explainer', label=timestamp)
+                            edge_display_label = (
+                                f"Time: {timestamp}\n"
+                                f"Type: {edge_type_str}\n"
+                                f"Loss: {event['loss']:.4f}"
+                            )
+                            critical_path.add_edge(u_hash, v_hash,
+                                                   weight=float(w),
+                                                   type=edge_type_str,
+                                                   loss_score=event['loss'],
+                                                   label=edge_display_label)
                 except Exception as e:
                     # print(f"Error explaining: {e}")
                     pass
@@ -412,7 +422,19 @@ def main():
 
         verified_graph.add_node(u, label=u_lbl)
         verified_graph.add_node(v, label=v_lbl)
-        verified_graph.add_edge(u, v, label=edge_label)
+
+        if critical_path.has_edge(u, v):
+            edge_data = critical_path.get_edge_data(u, v)
+
+            # Lấy các thông tin quan trọng
+            w_val = edge_data.get('weight', 0.0)
+            type_val = edge_data.get('type', 'unknown')
+            label_val = edge_data.get('label', '')  # Đây là cái label chứa timestamp và loss ta đã tạo
+
+            verified_graph.add_edge(u, v,
+                                    weight=w_val,
+                                    type=type_val,
+                                    label=label_val)
 
     # --- FALLBACK NẾU MẤT CẠNH QUÁ NHIỀU ---
     # Nếu verified graph rỗng, ta có thể lấy critical_path làm kết quả chính
@@ -429,7 +451,7 @@ def main():
 
     # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
     lca_nodes = find_multiple_lcas(summary_graph, target_nodes)
-
+    apply_visual_style(verified_graph)
     lca_label = "Unknown"
     if lca_nodes:
         print(f"   [FOUND] Identified {len(lca_nodes)} Root Cause(s).")
@@ -476,7 +498,7 @@ def main():
 
     # --- VISUALIZATION ---
 
-            apply_visual_style(verified_graph)
+
             # Highlight LCA Node
             if lca_node and lca_node in verified_graph:
                 verified_graph.nodes[lca_node]['color'] = 'red'
@@ -498,21 +520,21 @@ def main():
     if verified_graph.number_of_edges() > 0:
         # Xuất file ảnh (giữ nguyên logic phần trước tôi đã gửi)
         output_dot = f"{artifact_dir}verified_attack_path.dot"
-        output_png = f"{artifact_dir}verified_attack_path.png"
+        output_png = f"{artifact_dir}verified_attack_path.pdf"
         nx.drawing.nx_pydot.write_dot(verified_graph, output_dot)
 
         summary_dot = f"{artifact_dir}summary_graph.dot"
-        summary_png = f"{artifact_dir}summary_graph.png"
+        summary_png = f"{artifact_dir}summary_graph.pdf"
         nx.drawing.nx_pydot.write_dot(summary_graph, summary_dot)
 
         critical_dot = f"{artifact_dir}critical_path.dot"
-        critical_png = f"{artifact_dir}critical_path.png"
+        critical_png = f"{artifact_dir}critical_path.pdf"
         nx.drawing.nx_pydot.write_dot(critical_path, critical_dot)
 
         try:
-            os.system(f"dot -Tpng {output_dot} -o {output_png}")
-            os.system(f"dot -Tpng {summary_dot} -o {summary_png}")
-            os.system(f"dot -Tpng {critical_dot} -o {critical_png}")
+            os.system(f"dot -Tpdf {output_dot} -o {output_png}")
+            os.system(f"dot -Tpdf {summary_dot} -o {summary_png}")
+            os.system(f"dot -Tpdf {critical_dot} -o {critical_png}")
             print(f"SUCCESS: Results saved to {output_png}")
         except:
             print("Saved dot files only.")

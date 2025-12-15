@@ -108,14 +108,26 @@ class TemporalGNNExplainer(nn.Module):
         # 5. Trích xuất Subgraph
         mask_final = torch.sigmoid(edge_mask).detach().cpu().numpy()
 
-        # Lọc cạnh quan trọng: Những cạnh có trọng số cao nghĩa là nếu bỏ nó đi,
-        # RE sẽ thay đổi lớn (không còn giống Original RE nữa -> nó là nguyên nhân)
+        # Lọc cạnh quan trọng
         important_indices = np.where(mask_final > 0.6)[0]
 
-        if len(important_indices) < 2:  # Lấy ít nhất vài cạnh
+        if len(important_indices) < 2:
             important_indices = np.argsort(mask_final)[-5:]
 
         src_global = n_id[edge_index[0, important_indices]].cpu().numpy()
         dst_global = n_id[edge_index[1, important_indices]].cpu().numpy()
+        weights_global = mask_final[important_indices]
 
-        return src_global, dst_global, mask_final[important_indices]
+        # [NEW] Trích xuất Edge Type từ message
+        # Giả định cấu trúc message: [src_feat | edge_feat | dst_feat]
+        # node_feat_dim = 16 (theo code của bạn)
+        selected_msgs = subgraph_msg[important_indices]
+
+        # Cắt lấy phần edge_feat ở giữa
+        edge_feats = selected_msgs[:, node_feat_dim:-node_feat_dim]
+
+        # Lấy chỉ số loại cạnh (ví dụ: 0, 1, 2...)
+        edge_types_idx = torch.argmax(edge_feats, dim=1).cpu().numpy()
+
+        # Trả về thêm edge_types_idx
+        return src_global, dst_global, weights_global, edge_types_idx
