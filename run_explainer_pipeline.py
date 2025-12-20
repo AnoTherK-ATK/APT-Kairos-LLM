@@ -332,12 +332,14 @@ def main():
                         full_data, memory, neighbor_loader
                     )
 
-                    timestamp = ns_time_to_datetime(event['time'])
-
+                    timestamp = ns_time_to_datetime_US(event['time'])
+                    true_event_type = event['edge_type']
                     for i in range(len(src_ids)):
                         u_id, v_id, w, t_idx = src_ids[i], dst_ids[i], weights[i], types[i]
                         t_idx_int = int(t_idx)
                         edge_type_str = rel2id.get(t_idx_int, f"Type_{t_idx_int}")
+                        if src_ids[i] == event['srcnode'] and dst_ids[i] == event['dstnode']:
+                            print(f"!!! MAPPING FOUND: Model_Index {types[i]} <===> Label {true_event_type}")
                         # [FIX] Sử dụng hàm thống nhất get_node_data
                         u_hash, u_label = get_node_data(u_id, nodeid2msg)
                         v_hash, v_label = get_node_data(v_id, nodeid2msg)
@@ -371,32 +373,40 @@ def main():
 
                     add_node_with_label(louvain_input_graph, u_hash, u_label)
                     add_node_with_label(louvain_input_graph, v_hash, v_label)
-                    louvain_input_graph.add_edge(u_hash, v_hash)
 
-        # --- 3. RUN LOUVAIN & UPDATE SUMMARY GRAPH ---
-                # --- 3. RUN LOUVAIN & UPDATE SUMMARY GRAPH ---
-            if louvain_input_graph.number_of_edges() > 0:
-                undirected_g = louvain_input_graph.to_undirected()
-                try:
-                    # print(f"   Running Louvain on {louvain_input_graph.number_of_edges()} edges...")
-                    partition = attack_investigation.community_louvain.best_partition(undirected_g)
+                    timestamp = ns_time_to_datetime_US(event['time'])
 
-                    # Chỉ thêm cạnh vào summary_graph nếu 2 node cùng community
-                    for u, v in louvain_input_graph.edges():
-                        if u in partition and v in partition:
-                            if partition[u] == partition[v]:  # Cùng cộng đồng -> Giữ lại
-                                summary_graph.add_edge(u, v)
+                    edge_display_label = (
+                        f"Time: {timestamp}\n"
+                        f"Type: {event['edge_type']}\n"
+                        f"Loss: {event['loss']:.4f}"
+                    )
 
-                                # [FIX] Copy label từ louvain_input_graph sang summary_graph
-                                # Vì add_edge không tự động copy thuộc tính node
-                                if 'label' not in summary_graph.nodes[u]:
-                                    summary_graph.nodes[u]['label'] = louvain_input_graph.nodes[u].get('label', u)
+                    louvain_input_graph.add_edge(u_hash, v_hash, label=edge_display_label)
 
-                                if 'label' not in summary_graph.nodes[v]:
-                                    summary_graph.nodes[v]['label'] = louvain_input_graph.nodes[v].get('label', v)
+    # --- 3. RUN LOUVAIN & UPDATE SUMMARY GRAPH ---
+    if louvain_input_graph.number_of_edges() > 0:
+        undirected_g = louvain_input_graph.to_undirected()
+        try:
+            # print(f"   Running Louvain on {louvain_input_graph.number_of_edges()} edges...")
+            partition = attack_investigation.community_louvain.best_partition(undirected_g)
 
-                except Exception as e:
-                    print(f"Louvain Error: {e}")
+            # Chỉ thêm cạnh vào summary_graph nếu 2 node cùng community
+            for u, v in louvain_input_graph.edges():
+                if u in partition and v in partition:
+                    if partition[u] == partition[v]:  # Cùng cộng đồng -> Giữ lại
+                        summary_graph.add_edge(u, v)
+
+                        # [FIX] Copy label từ louvain_input_graph sang summary_graph
+                        # Vì add_edge không tự động copy thuộc tính node
+                        if 'label' not in summary_graph.nodes[u]:
+                            summary_graph.nodes[u]['label'] = louvain_input_graph.nodes[u].get('label', u)
+
+                        if 'label' not in summary_graph.nodes[v]:
+                            summary_graph.nodes[v]['label'] = louvain_input_graph.nodes[v].get('label', v)
+
+        except Exception as e:
+            print(f"Louvain Error: {e}")
 
     # --- 4. INTERSECTION & RESULT ---
     print("\n>>> Finding Intersection (Verified Attack Path)...")
@@ -443,71 +453,71 @@ def main():
         print("\n[WARN] Intersection resulted in 0 edges. Creating graph from Critical Path only.")
         verified_graph = critical_path.copy()
 
-    # --- 5. FIND LCA (ROOT CAUSE ANALYSIS) ---
-    print("\n>>> Identifying Root Cause (LCA)...")
-
-    # Lấy danh sách các node trong đồ thị kết quả (Verified Graph)
-    target_nodes = set(verified_graph.nodes())
-
-    # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
-    lca_nodes = find_multiple_lcas(summary_graph, target_nodes)
-    apply_visual_style(verified_graph)
-    lca_label = "Unknown"
-    if lca_nodes:
-        print(f"   [FOUND] Identified {len(lca_nodes)} Root Cause(s).")
-
-        for idx, lca_node in enumerate(lca_nodes):
-            lca_label = summary_graph.nodes[lca_node].get('label', lca_node)
-            print(f"    - Root {idx + 1}: {lca_label} (Hash: {lca_node})")
-
-            # Thêm LCA vào verified_graph để hiển thị
-            if lca_node not in verified_graph:
-                verified_graph.add_node(lca_node, label=lca_label)
-
-            # Nối LCA với các node trong đồ thị (Tái tạo đường đi tấn công)
-            # Chỉ nối tới những node chưa có cha nào khác trong verified_graph để đỡ rối,
-            # hoặc nối tới tất cả target thuộc nhánh của nó.
-            for target in list(verified_graph.nodes()):
-                if target == lca_node: continue
-
-                # Kiểm tra xem target có phải là hậu duệ của LCA này không
-                try:
-                    if nx.has_path(summary_graph, lca_node, target):
-                        path = nx.shortest_path(summary_graph, source=lca_node, target=target)
-
-                        # Thêm đường đi vào đồ thị
-                        for i in range(len(path) - 1):
-                            u, v = path[i], path[i + 1]
-                            # Copy thông tin node
-                            if u not in verified_graph:
-                                u_lbl = summary_graph.nodes[u].get('label', u)
-                                verified_graph.add_node(u, label=u_lbl)
-                            if v not in verified_graph:
-                                v_lbl = summary_graph.nodes[v].get('label', v)
-                                verified_graph.add_node(v, label=v_lbl)
-
-                            # Copy thông tin cạnh (bao gồm timestamp label nếu bạn đã làm bước trước)
-                            edge_data = summary_graph.get_edge_data(u, v)
-                            edge_label = edge_data.get('label', '') if edge_data else ''
-
-                            # Tránh thêm cạnh trùng lặp
-                            if not verified_graph.has_edge(u, v):
-                                verified_graph.add_edge(u, v, label=edge_label)
-                except Exception:
-                    pass
-
-    # --- VISUALIZATION ---
-
-
-            # Highlight LCA Node
-            if lca_node and lca_node in verified_graph:
-                verified_graph.nodes[lca_node]['color'] = 'red'
-                verified_graph.nodes[lca_node]['fontcolor'] = 'red'
-                verified_graph.nodes[lca_node]['penwidth'] = '2.0'
-                # Nếu muốn label rõ hơn:
-                verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
-    else:
-        print("   [Info] LCA not found (Graph might be too disjoint).")
+    # # --- 5. FIND LCA (ROOT CAUSE ANALYSIS) ---
+    # print("\n>>> Identifying Root Cause (LCA)...")
+    #
+    # # Lấy danh sách các node trong đồ thị kết quả (Verified Graph)
+    # target_nodes = set(verified_graph.nodes())
+    #
+    # # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
+    # lca_nodes = find_multiple_lcas(summary_graph, target_nodes)
+    # apply_visual_style(verified_graph)
+    # lca_label = "Unknown"
+    # if lca_nodes:
+    #     print(f"   [FOUND] Identified {len(lca_nodes)} Root Cause(s).")
+    #
+    #     for idx, lca_node in enumerate(lca_nodes):
+    #         lca_label = summary_graph.nodes[lca_node].get('label', lca_node)
+    #         print(f"    - Root {idx + 1}: {lca_label} (Hash: {lca_node})")
+    #
+    #         # Thêm LCA vào verified_graph để hiển thị
+    #         if lca_node not in verified_graph:
+    #             verified_graph.add_node(lca_node, label=lca_label)
+    #
+    #         # Nối LCA với các node trong đồ thị (Tái tạo đường đi tấn công)
+    #         # Chỉ nối tới những node chưa có cha nào khác trong verified_graph để đỡ rối,
+    #         # hoặc nối tới tất cả target thuộc nhánh của nó.
+    #         for target in list(verified_graph.nodes()):
+    #             if target == lca_node: continue
+    #
+    #             # Kiểm tra xem target có phải là hậu duệ của LCA này không
+    #             try:
+    #                 if nx.has_path(summary_graph, lca_node, target):
+    #                     path = nx.shortest_path(summary_graph, source=lca_node, target=target)
+    #
+    #                     # Thêm đường đi vào đồ thị
+    #                     for i in range(len(path) - 1):
+    #                         u, v = path[i], path[i + 1]
+    #                         # Copy thông tin node
+    #                         if u not in verified_graph:
+    #                             u_lbl = summary_graph.nodes[u].get('label', u)
+    #                             verified_graph.add_node(u, label=u_lbl)
+    #                         if v not in verified_graph:
+    #                             v_lbl = summary_graph.nodes[v].get('label', v)
+    #                             verified_graph.add_node(v, label=v_lbl)
+    #
+    #                         # Copy thông tin cạnh (bao gồm timestamp label nếu bạn đã làm bước trước)
+    #                         edge_data = summary_graph.get_edge_data(u, v)
+    #                         edge_label = edge_data.get('label', '') if edge_data else ''
+    #
+    #                         # Tránh thêm cạnh trùng lặp
+    #                         if not verified_graph.has_edge(u, v):
+    #                             verified_graph.add_edge(u, v, label=edge_label)
+    #             except Exception:
+    #                 pass
+    #
+    # # --- VISUALIZATION ---
+    #
+    #
+    #         # Highlight LCA Node
+    #         if lca_node and lca_node in verified_graph:
+    #             verified_graph.nodes[lca_node]['color'] = 'red'
+    #             verified_graph.nodes[lca_node]['fontcolor'] = 'red'
+    #             verified_graph.nodes[lca_node]['penwidth'] = '2.0'
+    #             # Nếu muốn label rõ hơn:
+    #             verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
+    # else:
+    #     print("   [Info] LCA not found (Graph might be too disjoint).")
 
 
     apply_visual_style(critical_path)
