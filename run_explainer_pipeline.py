@@ -257,6 +257,134 @@ def load_kairos_model():
     neighbor_loader.reset_state()
     return memory, gnn, link_pred, neighbor_loader
 
+try:
+    db_cursor, db_connection = init_database_connection()
+    print(">>> Database connected successfully.")
+except Exception as e:
+    print(f"!!! Database connection failed: {e}")
+    db_cursor = None
+
+# Hàm tra cứu loại cạnh
+# def get_real_edge_type(u, v, t, cursor):
+#     if cursor is None: return "UNKNOWN"
+#
+#     # Sai số cho phép: 10,000 nanoseconds (= 10 microseconds)
+#     # Điều này giúp xử lý vấn đề sai số float của PyTorch và sai lệch nhỏ trong log
+#     DELTA_NS = 10000
+#
+#     t_val = int(t)
+#     t_min = t_val - DELTA_NS
+#     t_max = t_val + DELTA_NS
+#
+#     # Query kiểm tra cả chiều xuôi (u->v) và chiều ngược (v->u)
+#     # Ưu tiên chiều xuôi trước
+#     sql = """
+#           SELECT operation, src_index_id
+#           FROM event_table
+#           WHERE (
+#               (src_index_id = %s AND dst_index_id = %s)
+#                   OR
+#               (src_index_id = %s AND dst_index_id = %s)
+#               )
+#             AND timestamp_rec BETWEEN %s AND %s LIMIT 1;
+#           """
+#
+#     try:
+#         # Truyền tham số: u, v cho chiều xuôi; v, u cho chiều ngược
+#         cursor.execute(sql, (str(u), str(v), str(v), str(u), t_min, t_max))
+#         result = cursor.fetchone()
+#         if result:
+#             operation = result[0]
+#             src_in_db = result[1]
+#
+#             # Logic phụ: Kiểm tra xem DB khớp chiều nào để log (nếu cần)
+#             # Nếu src trong DB trùng với u đầu vào -> Khớp chiều xuôi
+#             # Nếu không -> Đã khớp chiều ngược (nhưng operation vẫn đúng)
+#             return operation
+#
+#     except Exception as e:
+#         print(f"SQL Error: {e}")
+#         pass
+#
+#     return "UNKNOWN"
+
+
+# --- THÊM CLASS CACHE MỚI (Đặt ở phần Helper Functions) ---
+class EdgeCache:
+    def __init__(self):
+        # Cấu trúc: key=(u, v), value=[(timestamp, operation), ...]
+        self.cache = {}
+        self.min_t = float('inf')
+        self.max_t = float('-inf')
+
+    def load_window(self, cursor, start_t, end_t):
+        """
+        Load toàn bộ sự kiện trong khoảng thời gian [start_t, end_t] từ DB vào RAM.
+        Mở rộng biên thời gian thêm 1 giây (1e9 ns) để chắc chắn bắt được các cạnh biên.
+        """
+        print("   [Cache] Pre-loading edges from DB...")
+        self.cache = {}
+        delta = 1_000_000_000  # 1 giây đệm
+
+        t_min = int(start_t) - delta
+        t_max = int(end_t) + delta
+
+        # Query lấy tất cả các cạnh trong khoảng thời gian này
+        sql = """
+              SELECT src_index_id, dst_index_id, timestamp_rec, operation
+              FROM event_table
+              WHERE timestamp_rec BETWEEN %s AND %s \
+              """
+        try:
+            cursor.execute(sql, (t_min, t_max))
+            rows = cursor.fetchall()
+
+            count = 0
+            for r in rows:
+                u, v, t, op = r[0], r[1], r[2], r[3]
+                # Lưu cả 2 chiều để dễ tìm kiếm
+                # Key (u, v)
+                if (u, v) not in self.cache: self.cache[(u, v)] = []
+                self.cache[(u, v)].append((t, op))
+
+                # Key (v, u) - Đánh dấu chiều ngược nếu cần xử lý riêng
+                # Ở đây ta lưu chung nhưng khi query sẽ check logic
+                count += 1
+            print(f"   [Cache] Loaded {count} edges into memory.")
+        except Exception as e:
+            print(f"   [Cache] Error loading: {e}")
+
+    def get_type(self, u, v, t):
+        """Tra cứu nhanh trong RAM với sai số thời gian"""
+        u_str, v_str = str(u), str(v)
+        target_t = int(t)
+        DELTA_NS = 20000  # 20 microseconds sai số cho phép
+        if len(self.cache) == 0:
+            return "ERROR"
+        # 1. Thử tìm chiều xuôi (u -> v)
+        if (u_str, v_str) in self.cache:
+            for cached_t, op in self.cache[(u_str, v_str)]:
+                if abs(cached_t - target_t) <= DELTA_NS:
+                    return op
+
+        # 2. Thử tìm chiều ngược (v -> u) - Do Explainer có thể đảo chiều
+        if (v_str, u_str) in self.cache:
+            for cached_t, op in self.cache[(v_str, u_str)]:
+                if abs(cached_t - target_t) <= DELTA_NS:
+                    return op
+
+        return "UNKNOWN"
+
+
+# Khởi tạo object global
+edge_cache_manager = EdgeCache()
+
+
+# Hàm wrapper để thay thế hàm cũ, giữ nguyên giao diện gọi
+def get_real_edge_type(u, v, t, cursor):
+    # Cursor không còn được dùng để query trực tiếp nữa, mà dùng cache
+    return edge_cache_manager.get_type(u, v, t)
+
 
 def main():
     # [FIX] Sửa logic kiểm tra file history
@@ -306,6 +434,15 @@ def main():
                 for line in f: anomalous_events.append(eval(line.strip()))
             if not anomalous_events: continue
 
+            times = [e['time'] for e in anomalous_events]
+            min_win_time = min(times)
+            max_win_time = max(times)
+
+            # Load dữ liệu DB vào RAM một lần duy nhất cho window này
+            edge_cache_manager.load_window(cur, min_win_time, max_win_time)
+            if len(anomalous_events) == 0:
+                print("wtf")
+                break
             replayer.advance_to(min([e['time'] for e in anomalous_events]))
 
             # --- THRESHOLD LOGIC ---
@@ -327,19 +464,16 @@ def main():
             # --- 1. BUILD CRITICAL PATH (EXPLAINER) ---
             for event in tqdm(target_events, desc="Explaining"):
                 try:
-                    src_ids, dst_ids, weights, types = explainer.explain_edge(
+                    src_ids, dst_ids, weights, timestamps = explainer.explain_edge(
                         event['srcnode'], event['dstnode'], event['time'],
                         full_data, memory, neighbor_loader
                     )
 
-                    timestamp = ns_time_to_datetime_US(event['time'])
                     true_event_type = event['edge_type']
                     for i in range(len(src_ids)):
-                        u_id, v_id, w, t_idx = src_ids[i], dst_ids[i], weights[i], types[i]
-                        t_idx_int = int(t_idx)
-                        edge_type_str = rel2id.get(t_idx_int, f"Type_{t_idx_int}")
-                        if src_ids[i] == event['srcnode'] and dst_ids[i] == event['dstnode']:
-                            print(f"!!! MAPPING FOUND: Model_Index {types[i]} <===> Label {true_event_type}")
+                        u_id, v_id, w, t_val = src_ids[i], dst_ids[i], weights[i], timestamps[i]
+                        edge_type_str = get_real_edge_type(u_id, v_id, t_val, db_cursor)
+                        print(f"   {edge_type_str}")
                         # [FIX] Sử dụng hàm thống nhất get_node_data
                         u_hash, u_label = get_node_data(u_id, nodeid2msg)
                         v_hash, v_label = get_node_data(v_id, nodeid2msg)
@@ -349,13 +483,13 @@ def main():
 
                         if w > 0.1:
                             edge_display_label = (
-                                f"Time: {timestamp}\n"
-                                f"Type: {edge_type_str}\n"
+                                f"Time: {ns_time_to_datetime_US(timestamps[i])}\n"
+                                # f"Type: {edge_type_str}\n"
                                 f"Loss: {event['loss']:.4f}"
                             )
                             critical_path.add_edge(u_hash, v_hash,
                                                    weight=float(w),
-                                                   type=edge_type_str,
+                                                   # type=edge_type_str,
                                                    loss_score=event['loss'],
                                                    label=edge_display_label)
                 except Exception as e:
@@ -378,7 +512,7 @@ def main():
 
                     edge_display_label = (
                         f"Time: {timestamp}\n"
-                        f"Type: {event['edge_type']}\n"
+                        # f"Type: {event['edge_type']}\n"
                         f"Loss: {event['loss']:.4f}"
                     )
 
@@ -453,71 +587,71 @@ def main():
         print("\n[WARN] Intersection resulted in 0 edges. Creating graph from Critical Path only.")
         verified_graph = critical_path.copy()
 
-    # # --- 5. FIND LCA (ROOT CAUSE ANALYSIS) ---
-    # print("\n>>> Identifying Root Cause (LCA)...")
-    #
-    # # Lấy danh sách các node trong đồ thị kết quả (Verified Graph)
-    # target_nodes = set(verified_graph.nodes())
-    #
-    # # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
-    # lca_nodes = find_multiple_lcas(summary_graph, target_nodes)
-    # apply_visual_style(verified_graph)
-    # lca_label = "Unknown"
-    # if lca_nodes:
-    #     print(f"   [FOUND] Identified {len(lca_nodes)} Root Cause(s).")
-    #
-    #     for idx, lca_node in enumerate(lca_nodes):
-    #         lca_label = summary_graph.nodes[lca_node].get('label', lca_node)
-    #         print(f"    - Root {idx + 1}: {lca_label} (Hash: {lca_node})")
-    #
-    #         # Thêm LCA vào verified_graph để hiển thị
-    #         if lca_node not in verified_graph:
-    #             verified_graph.add_node(lca_node, label=lca_label)
-    #
-    #         # Nối LCA với các node trong đồ thị (Tái tạo đường đi tấn công)
-    #         # Chỉ nối tới những node chưa có cha nào khác trong verified_graph để đỡ rối,
-    #         # hoặc nối tới tất cả target thuộc nhánh của nó.
-    #         for target in list(verified_graph.nodes()):
-    #             if target == lca_node: continue
-    #
-    #             # Kiểm tra xem target có phải là hậu duệ của LCA này không
-    #             try:
-    #                 if nx.has_path(summary_graph, lca_node, target):
-    #                     path = nx.shortest_path(summary_graph, source=lca_node, target=target)
-    #
-    #                     # Thêm đường đi vào đồ thị
-    #                     for i in range(len(path) - 1):
-    #                         u, v = path[i], path[i + 1]
-    #                         # Copy thông tin node
-    #                         if u not in verified_graph:
-    #                             u_lbl = summary_graph.nodes[u].get('label', u)
-    #                             verified_graph.add_node(u, label=u_lbl)
-    #                         if v not in verified_graph:
-    #                             v_lbl = summary_graph.nodes[v].get('label', v)
-    #                             verified_graph.add_node(v, label=v_lbl)
-    #
-    #                         # Copy thông tin cạnh (bao gồm timestamp label nếu bạn đã làm bước trước)
-    #                         edge_data = summary_graph.get_edge_data(u, v)
-    #                         edge_label = edge_data.get('label', '') if edge_data else ''
-    #
-    #                         # Tránh thêm cạnh trùng lặp
-    #                         if not verified_graph.has_edge(u, v):
-    #                             verified_graph.add_edge(u, v, label=edge_label)
-    #             except Exception:
-    #                 pass
-    #
-    # # --- VISUALIZATION ---
-    #
-    #
-    #         # Highlight LCA Node
-    #         if lca_node and lca_node in verified_graph:
-    #             verified_graph.nodes[lca_node]['color'] = 'red'
-    #             verified_graph.nodes[lca_node]['fontcolor'] = 'red'
-    #             verified_graph.nodes[lca_node]['penwidth'] = '2.0'
-    #             # Nếu muốn label rõ hơn:
-    #             verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
-    # else:
-    #     print("   [Info] LCA not found (Graph might be too disjoint).")
+    # --- 5. FIND LCA (ROOT CAUSE ANALYSIS) ---
+    print("\n>>> Identifying Root Cause (LCA)...")
+
+    # Lấy danh sách các node trong đồ thị kết quả (Verified Graph)
+    target_nodes = set(verified_graph.nodes())
+
+    # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
+    lca_nodes = find_multiple_lcas(summary_graph, target_nodes)
+    apply_visual_style(verified_graph)
+    lca_label = "Unknown"
+    if lca_nodes:
+        print(f"   [FOUND] Identified {len(lca_nodes)} Root Cause(s).")
+
+        for idx, lca_node in enumerate(lca_nodes):
+            lca_label = summary_graph.nodes[lca_node].get('label', lca_node)
+            print(f"    - Root {idx + 1}: {lca_label} (Hash: {lca_node})")
+
+            # Thêm LCA vào verified_graph để hiển thị
+            if lca_node not in verified_graph:
+                verified_graph.add_node(lca_node, label=lca_label)
+
+            # Nối LCA với các node trong đồ thị (Tái tạo đường đi tấn công)
+            # Chỉ nối tới những node chưa có cha nào khác trong verified_graph để đỡ rối,
+            # hoặc nối tới tất cả target thuộc nhánh của nó.
+            for target in list(verified_graph.nodes()):
+                if target == lca_node: continue
+
+                # Kiểm tra xem target có phải là hậu duệ của LCA này không
+                try:
+                    if nx.has_path(summary_graph, lca_node, target):
+                        path = nx.shortest_path(summary_graph, source=lca_node, target=target)
+
+                        # Thêm đường đi vào đồ thị
+                        for i in range(len(path) - 1):
+                            u, v = path[i], path[i + 1]
+                            # Copy thông tin node
+                            if u not in verified_graph:
+                                u_lbl = summary_graph.nodes[u].get('label', u)
+                                verified_graph.add_node(u, label=u_lbl)
+                            if v not in verified_graph:
+                                v_lbl = summary_graph.nodes[v].get('label', v)
+                                verified_graph.add_node(v, label=v_lbl)
+
+                            # Copy thông tin cạnh (bao gồm timestamp label nếu bạn đã làm bước trước)
+                            edge_data = summary_graph.get_edge_data(u, v)
+                            edge_label = edge_data.get('label', '') if edge_data else ''
+
+                            # Tránh thêm cạnh trùng lặp
+                            if not verified_graph.has_edge(u, v):
+                                verified_graph.add_edge(u, v, label=edge_label)
+                except Exception:
+                    pass
+
+    # --- VISUALIZATION ---
+
+
+            # Highlight LCA Node
+            if lca_node and lca_node in verified_graph:
+                verified_graph.nodes[lca_node]['color'] = 'red'
+                verified_graph.nodes[lca_node]['fontcolor'] = 'red'
+                verified_graph.nodes[lca_node]['penwidth'] = '2.0'
+                # Nếu muốn label rõ hơn:
+                verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
+    else:
+        print("   [Info] LCA not found (Graph might be too disjoint).")
 
 
     apply_visual_style(critical_path)

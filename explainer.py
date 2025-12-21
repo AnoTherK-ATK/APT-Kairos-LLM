@@ -129,5 +129,7 @@ class TemporalGNNExplainer(nn.Module):
         # Lấy chỉ số loại cạnh (ví dụ: 0, 1, 2...)
         edge_types_idx = torch.argmax(edge_feats, dim=1).cpu().numpy()
 
+        t_global = subgraph_t[important_indices].cpu().numpy()
+
         # Trả về thêm edge_types_idx
-        return src_global, dst_global, weights_global, edge_types_idx
+        return src_global, dst_global, weights_global, t_global
