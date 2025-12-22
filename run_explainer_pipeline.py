@@ -332,7 +332,7 @@ def main():
                         full_data, memory, neighbor_loader
                     )
 
-                    timestamp = ns_time_to_datetime(event['time'])
+                    timestamp = ns_time_to_datetime_US(event['time'])
 
                     for i in range(len(src_ids)):
                         u_id, v_id, w, t_idx = src_ids[i], dst_ids[i], weights[i], types[i]
@@ -348,7 +348,7 @@ def main():
                         if w > 0.1:
                             edge_display_label = (
                                 f"Time: {timestamp}\n"
-                                f"Type: {edge_type_str}\n"
+                                # f"Type: {edge_type_str}\n"
                                 f"Loss: {event['loss']:.4f}"
                             )
                             critical_path.add_edge(u_hash, v_hash,
@@ -369,9 +369,19 @@ def main():
                     u_hash, u_label = get_node_data(event['srcnode'], nodeid2msg)
                     v_hash, v_label = get_node_data(event['dstnode'], nodeid2msg)
 
+                    timestamp = ns_time_to_datetime_US(event['time'])
+                    edge_display_label = (
+                        f"Time: {timestamp}\n"
+                        f"Type: {event["edge_type"]}\n"
+                        f"Loss: {event['loss']:.4f}"
+                    )
                     add_node_with_label(louvain_input_graph, u_hash, u_label)
                     add_node_with_label(louvain_input_graph, v_hash, v_label)
-                    louvain_input_graph.add_edge(u_hash, v_hash)
+                    louvain_input_graph.add_edge(u_hash, v_hash,
+                                                 weight=event['loss'],
+                                                 type=event["edge_type"],
+                                                 loss_score=event['loss'],
+                                                 label=edge_display_label)
 
         # --- 3. RUN LOUVAIN & UPDATE SUMMARY GRAPH ---
                 # --- 3. RUN LOUVAIN & UPDATE SUMMARY GRAPH ---
@@ -382,10 +392,11 @@ def main():
                     partition = attack_investigation.community_louvain.best_partition(undirected_g)
 
                     # Chỉ thêm cạnh vào summary_graph nếu 2 node cùng community
-                    for u, v in louvain_input_graph.edges():
+                    for u, v, attr in louvain_input_graph.edges.data():
+                        edge_label = attr.get('label')
                         if u in partition and v in partition:
                             if partition[u] == partition[v]:  # Cùng cộng đồng -> Giữ lại
-                                summary_graph.add_edge(u, v)
+                                summary_graph.add_edge(u, v, label=edge_label)
 
                                 # [FIX] Copy label từ louvain_input_graph sang summary_graph
                                 # Vì add_edge không tự động copy thuộc tính node
@@ -412,19 +423,19 @@ def main():
     verified_graph_struct = nx.intersection(critical_path, summary_graph)
 
     verified_graph = nx.DiGraph()
-    for u, v in verified_graph_struct.edges():
+    for u, v, attr in verified_graph_struct.edges.data():
         # Lấy label từ critical_path (nơi chứa label chính xác nhất)
         u_lbl = critical_path.nodes[u].get('label', u)
         v_lbl = critical_path.nodes[v].get('label', v)
 
-        edge_data = critical_path.get_edge_data(u, v)
+        edge_data = summary_graph.get_edge_data(u, v)
         edge_label = edge_data.get('label', '') if edge_data else ''
 
         verified_graph.add_node(u, label=u_lbl)
         verified_graph.add_node(v, label=v_lbl)
 
-        if critical_path.has_edge(u, v):
-            edge_data = critical_path.get_edge_data(u, v)
+        if summary_graph.has_edge(u, v):
+            edge_data = summary_graph.get_edge_data(u, v)
 
             # Lấy các thông tin quan trọng
             w_val = edge_data.get('weight', 0.0)
