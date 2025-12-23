@@ -35,6 +35,39 @@ def get_clean_label(msg_str):
     return attack_investigation.replace_path_name(msg_str)
 
 
+import re
+
+
+def get_shape_from_label(label: str) -> str:
+    """
+    Phân loại nhãn (label) để trả về hình dạng tương ứng.
+    - IPv4/IPv6: diamond
+    - File path: ellipse
+    - Khác (Process): box
+    """
+
+    # 1. Regex cho IPv4 (Chính xác hơn: giới hạn số từ 0-255)
+    # Rút gọn: \d{1,3} lặp lại 3 lần kèm dấu chấm, kết thúc bằng \d{1,3}
+    ipv4_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+
+    # 2. Regex cho File Path
+    # Bắt đầu bằng / (Linux), ./ hoặc ../ (Relative), hoặc C:\ (Windows)
+    file_pattern = r'^(\/|\.\.?\/|[a-zA-Z]:\\)'
+
+    # Kiểm tra IP (Ưu tiên IPv4 hoặc chứa dấu ':' và số cho IPv6)
+    is_ip = re.search(ipv4_pattern, label) or (':' in label and any(c.isdigit() for c in label))
+
+    if is_ip:
+        return 'diamond'
+
+    # Kiểm tra File Path
+    if re.match(file_pattern, label):
+        return 'ellipse'
+
+    # Mặc định là Process
+    return 'box'
+
+
 def get_label_from_db(node_id, nodeid2msg):
     try:
         if node_id in nodeid2msg:
@@ -199,12 +232,7 @@ def apply_visual_style(graph):
         data['fontsize'] = '10'
         data['style'] = ''
 
-        if 'netflow' in label or (':' in label and any(c.isdigit() for c in label)):
-            data['shape'] = 'diamond'
-        elif 'subject' in label or any(proc in label for proc in ['imapd', 'sh', 'python', 'nginx', 'vim']):
-            data['shape'] = 'box'
-        else:
-            data['shape'] = 'ellipse'
+        data['shape'] = get_shape_from_label(label)
 
     for u, v, data in graph.edges(data=True):
         data['color'] = 'blue'
@@ -465,7 +493,7 @@ def main():
 
     # Tìm LCA dựa trên kiến thức toàn vẹn của Critical Path (Explainer)
     lca_nodes = find_multiple_lcas(summary_graph, target_nodes)
-    apply_visual_style(verified_graph)
+
     lca_label = "Unknown"
     if lca_nodes:
         print(f"   [FOUND] Identified {len(lca_nodes)} Root Cause(s).")
@@ -517,22 +545,20 @@ def main():
                 except Exception:
                     pass
 
-    # --- VISUALIZATION ---
 
-
-            # Highlight LCA Node
-            if lca_node and lca_node in verified_graph:
-                verified_graph.nodes[lca_node]['color'] = 'red'
-                verified_graph.nodes[lca_node]['fontcolor'] = 'red'
-                verified_graph.nodes[lca_node]['penwidth'] = '1.0'
-                # Nếu muốn label rõ hơn:
-                verified_graph.nodes[lca_node]['label'] = f"{verified_graph.nodes[lca_node].get('label', '')}"
     else:
         print("   [Info] LCA not found (Graph might be too disjoint).")
 
-
+    apply_visual_style(verified_graph)
     apply_visual_style(critical_path)
     apply_visual_style(summary_graph)
+    for it, lca_node in enumerate(lca_nodes):
+        if lca_node and lca_node in verified_graph:
+            verified_graph.nodes[lca_node]['color'] = 'red'
+            verified_graph.nodes[lca_node]['fontcolor'] = 'red'
+            verified_graph.nodes[lca_node]['penwidth'] = '1.0'
+            # Nếu muốn label rõ hơn:
+            verified_graph.nodes[lca_node]['label'] = f"{verified_graph.nodes[lca_node].get('label', '')}"
     print(f"Stats:")
     print(f" - Critical Path Edges: {critical_path.number_of_edges()}")
     print(f" - Summary Graph Edges: {summary_graph.number_of_edges()}")
