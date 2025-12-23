@@ -512,7 +512,8 @@ def main():
                                                         type=edge_type,
                                                         loss_score=edge_loss_score,
                                                         label=edge_label,
-                                                        fontsize=6)
+                                                        fontsize=6,
+                                                        color='blue')
                 except Exception:
                     pass
 
