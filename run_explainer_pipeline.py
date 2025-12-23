@@ -345,14 +345,13 @@ def main():
                         add_node_with_label(critical_path, u_hash, u_label)
                         add_node_with_label(critical_path, v_hash, v_label)
 
-                        if w > 0.1:
+                        if w > 0.5:
                             edge_display_label = (
                                 f"Time: {timestamp}\n"
                                 # f"Type: {edge_type_str}\n"
                                 f"Loss: {event['loss']:.4f}"
                             )
                             critical_path.add_edge(u_hash, v_hash,
-                                                   weight=float(w),
                                                    type=edge_type_str,
                                                    loss_score=event['loss'],
                                                    label=edge_display_label)
@@ -378,7 +377,6 @@ def main():
                     add_node_with_label(louvain_input_graph, u_hash, u_label)
                     add_node_with_label(louvain_input_graph, v_hash, v_label)
                     louvain_input_graph.add_edge(u_hash, v_hash,
-                                                 weight=event['loss'],
                                                  type=event["edge_type"],
                                                  loss_score=event['loss'],
                                                  label=edge_display_label)
@@ -394,9 +392,14 @@ def main():
                     # Chỉ thêm cạnh vào summary_graph nếu 2 node cùng community
                     for u, v, attr in louvain_input_graph.edges.data():
                         edge_label = attr.get('label')
+                        edge_type = attr.get('type')
+                        edge_weight = attr.get('loss_score')
                         if u in partition and v in partition:
                             if partition[u] == partition[v]:  # Cùng cộng đồng -> Giữ lại
-                                summary_graph.add_edge(u, v, label=edge_label)
+                                summary_graph.add_edge(u, v,
+                                                       type=edge_type,
+                                                       loss_score=edge_weight,
+                                                       label=edge_label)
 
                                 # [FIX] Copy label từ louvain_input_graph sang summary_graph
                                 # Vì add_edge không tự động copy thuộc tính node
@@ -438,12 +441,12 @@ def main():
             edge_data = summary_graph.get_edge_data(u, v)
 
             # Lấy các thông tin quan trọng
-            w_val = edge_data.get('weight', 0.0)
+            w_val = edge_data.get('loss_score', 0.0)
             type_val = edge_data.get('type', 'unknown')
             label_val = edge_data.get('label', '')  # Đây là cái label chứa timestamp và loss ta đã tạo
 
             verified_graph.add_edge(u, v,
-                                    weight=w_val,
+                                    loss_score=w_val,
                                     type=type_val,
                                     label=label_val)
 
@@ -499,11 +502,17 @@ def main():
 
                             # Copy thông tin cạnh (bao gồm timestamp label nếu bạn đã làm bước trước)
                             edge_data = summary_graph.get_edge_data(u, v)
+                            edge_type = edge_data.get('type', 'unknown')
+                            edge_loss_score = edge_data.get('loss_score', 0.0)
                             edge_label = edge_data.get('label', '') if edge_data else ''
 
                             # Tránh thêm cạnh trùng lặp
                             if not verified_graph.has_edge(u, v):
-                                verified_graph.add_edge(u, v, label=edge_label)
+                                verified_graph.add_edge(u, v,
+                                                        type=edge_type,
+                                                        loss_score=edge_loss_score,
+                                                        label=edge_label,
+                                                        fontsize=6)
                 except Exception:
                     pass
 
@@ -514,9 +523,9 @@ def main():
             if lca_node and lca_node in verified_graph:
                 verified_graph.nodes[lca_node]['color'] = 'red'
                 verified_graph.nodes[lca_node]['fontcolor'] = 'red'
-                verified_graph.nodes[lca_node]['penwidth'] = '2.0'
+                verified_graph.nodes[lca_node]['penwidth'] = '1.0'
                 # Nếu muốn label rõ hơn:
-                verified_graph.nodes[lca_node]['label'] = f"ROOT: {verified_graph.nodes[lca_node].get('label', '')}"
+                verified_graph.nodes[lca_node]['label'] = f"{verified_graph.nodes[lca_node].get('label', '')}"
     else:
         print("   [Info] LCA not found (Graph might be too disjoint).")
 
