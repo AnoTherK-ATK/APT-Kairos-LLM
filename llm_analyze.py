@@ -93,10 +93,13 @@ class GraphLLMAnalyzer:
         return "\n".join(description)
 
     def analyze_with_llm(self,
-                         dot_input: str,
+                         dot_input: str = "",
                          instruction: str,
                          provider: str = 'gemini',
                          use_raw_dot: bool = False,
+                         model_name: str = "gemini-2.0-flash",
+                         use_graph_directive: bool = False,
+                         graph_input: object = None) -> str:
 
         # 1. Xử lý dữ liệu
         if use_raw_dot:
@@ -106,7 +109,10 @@ class GraphLLMAnalyzer:
             else:
                 graph_content = dot_input
         else:
-            G = self.load_graph_from_dot(dot_input, is_file_path=os.path.exists(dot_input))
+            if use_graph_directive:
+                G = self.load_graph_from_dot(dot_input, is_file_path=os.path.exists(dot_input))
+            else:
+                G = graph_input
             graph_content = self._clean_and_summarize_graph(G)
 
         # 2. [CẬP NHẬT] Prompt nâng cao với chỉ dẫn về Loss Score

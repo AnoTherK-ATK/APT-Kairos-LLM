@@ -600,12 +600,13 @@ def main():
         """
 
     analyzer = GraphLLMAnalyzer(openai_api_key=OPENAI_KEY, gemini_api_key=GEMINI_KEY)
-    dot_file_path = f"{artifact_dir}verified_attack_path.dot"
+    # dot_file_path = f"{artifact_dir}verified_attack_path.dot"
     result = analyzer.analyze_with_llm(
-        dot_input=dot_file_path,
         instruction=instruction_prompt,
         provider="gemini",
-        model_name="gemini-3-pro-preview"  # Hoặc gemini-1.5-pro
+        model_name="gemini-3-pro-preview",  # Hoặc gemini-1.5-pro
+        use_graph_directive = True,
+        graph_input=verified_graph,
     )
     with open("report.md", "w") as f:
         f.write(result)
