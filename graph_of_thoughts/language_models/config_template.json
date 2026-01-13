@@ -45,5 +45,24 @@
         "temperature": 0.6,
         "top_k": 10,
         "max_tokens": 4096
+    },
+    "gpt-5": {
+      "api_key": "YOUR_OPENAI_KEY",
+      "model_name": "gpt-5",
+      "temperature": 1.0,
+      "max_tokens": 4096,
+      "stop": null
+    },
+    "gemini-3-pro": {
+      "api_key": "YOUR_GOOGLE_API_KEY",
+      "model_name": "gemini-3-pro",
+      "thinking_level": "high",
+      "temperature": 1.0
+    },
+    "gemini-3-flash": {
+      "api_key": "YOUR_GOOGLE_API_KEY",
+      "model_name": "gemini-3-flash",
+      "thinking_level": "low",
+      "temperature": 0.7
     }
 }

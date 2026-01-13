@@ -10,3 +10,4 @@ llama/*
 inference_results/*
 test.png
 *.log
+api_key.py

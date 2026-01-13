@@ -14,6 +14,8 @@ from config import *
 from kairos_utils import *
 import attack_investigation
 from explainer import TemporalGNNExplainer
+from llm_analyze import GraphLLMAnalyzer
+from api_key import *
 
 # --- CẤU HÌNH ---
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -587,6 +589,26 @@ def main():
             print("Saved dot files only.")
     else:
         print("No graph generated.")
+
+    print("========Calling LLM to analyze=========")
+    instruction_prompt = """
+        Nhiệm vụ của bạn là phân tích đồ thị nguồn gốc chứa các node và edge liên quan đến một cuộc tấn công mạng. 
+        Thực hiện phân tích, đối chiếu các dấu hiệu bất thường xuất hiện trong đồ thị có khả năng cao liên quan đến tấn công mạng (tên tiến trình bất thường, IP, port , các file nhạy cảm). 
+        Từ đó cung cấp cho tôi các kịch bản tấn công có thể có từ những thông tin trong đồ thị. 
+        Sau đó bằng với kinh nghiệm dày dặn của mình hãy chỉ ra những manh mối quan trọng, xâu chuỗi lại thành sơ đồ hành vi tấn công.
+        Cuối cùng lập ra một báo cáo phân tích (dạng markdown và mermaid) về những gì mà bạn điều tra được.
+        """
+
+    analyzer = GraphLLMAnalyzer(openai_api_key=OPENAI_KEY, gemini_api_key=GEMINI_KEY)
+    dot_file_path = f"{artifact_dir}verified_attack_path.dot"
+    result = analyzer.analyze_with_llm(
+        dot_input=dot_file_path,
+        instruction=instruction_prompt,
+        provider="gemini",
+        model_name="gemini-3-pro-preview"  # Hoặc gemini-1.5-pro
+    )
+    with open("report.md", "w") as f:
+        f.write(result)
 
 
 if __name__ == "__main__":

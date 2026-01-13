@@ -187,7 +187,7 @@ def main():
     df = pd.DataFrame(results).T  # Transpose để dòng là Model
 
     # Sắp xếp lại thứ tự nếu có (để UniMP lên đầu làm chuẩn)
-    priority_order = ['unimp', 'gat', 'rgcn', 'sage', 'gcn']
+    priority_order = ['unimp', 'gat', 'gcn']
     existing_models = [m for m in priority_order if m in df.index]
     other_models = [m for m in df.index if m not in existing_models]
     df = df.reindex(existing_models + other_models)

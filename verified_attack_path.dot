@@ -1,5 +1,5 @@
 strict digraph {
-graph[rankndir=LR]
+graph[rankdir=LR]
 7403964631700934850 [label="127.0.0.1:63076", color=blue, fontcolor=black, fontsize=10, style="", shape=diamond];
 9016541496483590863 [label="php-fpm", color=blue, fontcolor=black, fontsize=10, style="", shape=box];
 6277608348856165037 [label="139.123.0.113:80", color=red, fontcolor=red, fontsize=10, style="", shape=diamond, penwidth=1.0];
