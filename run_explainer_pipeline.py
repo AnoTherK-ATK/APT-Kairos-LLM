@@ -14,7 +14,7 @@ from config import *
 from kairos_utils import *
 import attack_investigation
 from explainer import TemporalGNNExplainer
-from llm_analyze import GraphLLMAnalyzer
+from llm_analyze import *
 from api_key import *
 
 # --- CẤU HÌNH ---

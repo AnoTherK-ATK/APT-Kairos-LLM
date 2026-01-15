@@ -94,7 +94,7 @@ class GraphLLMAnalyzer:
 
     def analyze_with_llm(self,
                          dot_input: str = "",
-                         instruction: str,
+                         instruction: str = "",
                          provider: str = 'gemini',
                          use_raw_dot: bool = False,
                          model_name: str = "gemini-2.0-flash",
@@ -109,7 +109,7 @@ class GraphLLMAnalyzer:
             else:
                 graph_content = dot_input
         else:
-            if use_graph_directive:
+            if not use_graph_directive:
                 G = self.load_graph_from_dot(dot_input, is_file_path=os.path.exists(dot_input))
             else:
                 G = graph_input
