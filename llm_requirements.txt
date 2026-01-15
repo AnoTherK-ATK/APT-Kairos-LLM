@@ -1,0 +1,3 @@
+networkx~=3.5
+pydot
+google-genai
